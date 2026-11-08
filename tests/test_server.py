@@ -101,6 +101,18 @@ class ViewTests(HubTestCase):
         self.assertEqual(j["speed"]["name"], "Standard")
         self.assertEqual(v["fans"]["part"], 100)
 
+    def test_purifying_air_after_the_print_shows_as_complete(self):
+        with mock.patch.object(server.time, "time", return_value=1_000_000):
+            self.feed(gcode_state="PREPARE", mc_percent=0, stg_cur=2)
+        with mock.patch.object(server.time, "time", return_value=1_000_000 + 3600):
+            j = self.feed(mc_percent=100, layer_num=326, stg_cur=66)["job"]
+        self.assertEqual((j["state"], j["label"], j["stage"], j["active"], j["finishing"]),
+                         ("FINISH", "Print complete", "Purifying chamber air", False, True))
+        self.assertEqual(j["durationSec"], 3600)
+        with mock.patch.object(server.time, "time", return_value=1_000_000 + 3600 + 200):
+            j = self.feed(gcode_state="FINISH", mc_percent=100, layer_num=326, stg_cur=-1)["job"]
+        self.assertEqual((j["state"], j["finishing"], j["durationSec"]), ("FINISH", False, 3600))  # not +purify
+
     def test_active_tray_and_job_filament_mapping(self):
         self.feed()
         self.hub.set_media(self.hub.job_key, server.parse_slice_info(SLICE_INFO, 1), None)
@@ -145,6 +157,15 @@ class CropTargetTests(HubTestCase):
         self.assertEqual(self.hub.crop_target(), ("idle", [180, 180]))
         self.feed(gcode_state="PREPARE")
         self.assertEqual(self.hub.crop_target()[0], "printing")
+
+    def test_idle_framing_once_the_model_is_done_while_still_running(self):
+        # X2D: last layer + 100%, then filament unload and ~3 min "Purifying chamber air" before FINISH
+        self.feed(mc_percent=99, layer_num=325)
+        self.assertEqual(self.hub.crop_target()[0], "printing")
+        self.feed(mc_percent=100, layer_num=326, stg_cur=0)
+        self.assertEqual(self.hub.crop_target()[0], "idle")
+        self.feed(mc_percent=100, layer_num=326, stg_cur=66)
+        self.assertEqual(self.hub.crop_target()[0], "idle")
 
     def test_holds_when_printer_state_unknown(self):
         self.assertIsNone(self.hub.crop_target())

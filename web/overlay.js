@@ -150,7 +150,7 @@
     m.showProgress = j.hasJob;
     m.isDone = st === 'FINISH';
     m.label = d.online ? (j.hasJob ? j.label : (st === 'IDLE' || st === 'FINISH' ? 'Idle' : j.label)) : (d.hasData ? 'Reconnecting' : 'Printer offline');
-    let stage = d.online && j.active ? (j.stage || '') : '';
+    let stage = d.online && (j.active || j.finishing) ? (j.stage || '') : '';
     if (st === 'PREPARE' && j.prepPercent < 100) stage = `Downloading ${j.prepPercent}%`;
     if (st === 'PREPARE' && j.step && stage) stage += ` · ${j.step}/${j.steps}`;
     if (j.error && (st === 'FAILED' || st === 'PAUSE')) stage = `Error ${j.error}`;

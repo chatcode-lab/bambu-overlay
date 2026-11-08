@@ -96,6 +96,10 @@ into OBS 28+; enable it in **Tools → WebSocket Server Settings**):
 | Preparing, printing, paused | 80 / 280: higher up, toolhead and part |
 | Idle, finished, stopped | 180 / 180: centred |
 
+A print counts as finished once the last layer is done and progress hits 100%. The printer still reports
+"running" for a few more minutes while it unloads filament and purifies the chamber air. The overlay already
+shows *Print complete · Purifying chamber air* then, and elapsed time stops at the end of the print.
+
 * Moves are eased over 2 s (adjustable 0–6 s). Values, mode (*Follow printer* / *Force printing* / *Force idle*)
   and an on/off switch are in the control panel. Keep top + bottom equal in both modes so the view pans without zooming.
 * Only `cropTop`/`cropBottom` of scene items whose source is `OBS_SOURCE` (default `X2D`) change, in every scene

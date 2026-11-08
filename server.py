@@ -1180,6 +1180,18 @@ SPEEDS = {1: "Silent", 2: "Standard", 3: "Sport", 4: "Ludicrous"}
 ACTIVE_STATES = ("PREPARE", "RUNNING", "PAUSE", "SLICING", "INIT")
 CROP_PRINTING_STATES = ("PREPARE", "RUNNING", "PAUSE")
 JOB_STATES = ACTIVE_STATES + ("FINISH", "FAILED")
+POST_PRINT_STAGES = (66,)  # Purifying chamber air
+
+
+def print_done(p: dict) -> bool:
+    """The model is printed but gcode_state is still RUNNING: the end routine (filament unload, ~20 s) and
+    chamber air purification (~3 min on the X2D) run before the printer reports FINISH."""
+    if str(p.get("gcode_state") or "").upper() != "RUNNING":
+        return False
+    if _int(p.get("stg_cur"), -1) in POST_PRINT_STAGES:
+        return True
+    total = _int(p.get("total_layer_num"))
+    return _int(p.get("mc_percent")) >= 100 and (total <= 0 or _int(p.get("layer_num")) >= total)
 
 
 def _int(v, d=0):
@@ -1378,6 +1390,9 @@ def build_view(hub: "Hub") -> dict:
     stage = None
     if state in ACTIVE_STATES and stg_cur not in (-1, 255) and not (stg_cur == 0 and state == "RUNNING"):
         stage = STAGES.get(stg_cur, f"Stage {stg_cur}")
+    finishing = print_done(p)
+    if finishing:
+        state = "FINISH"  # show it as complete; the stage (e.g. "Purifying chamber air") stays visible
     err = _int(p.get("print_error"))
     task = str(p.get("subtask_name") or "")
     design_id = str(p.get("design_id") or "")
@@ -1392,7 +1407,7 @@ def build_view(hub: "Hub") -> dict:
         "state": state, "label": STATE_LABELS.get(state, state.title()), "stage": stage, "stageId": stg_cur,
         "step": (stg.index(stg_cur) + 1) if state == "PREPARE" and stg_cur in stg else None,
         "steps": len(stg) if state == "PREPARE" else None,
-        "hasJob": state in JOB_STATES and bool(task), "active": state in ACTIVE_STATES,
+        "hasJob": state in JOB_STATES and bool(task), "active": state in ACTIVE_STATES, "finishing": finishing,
         "task": task, "fileName": _pretty_name(task), "title": meta.get("title"),
         "designer": meta.get("designer"), "license": meta.get("license"),
         "makerworld": f"makerworld.com/models/{design_id}" if design_id.isdigit() and design_id != "0" else None,
@@ -1523,9 +1538,12 @@ class Hub:
                 self.jobs[key] = {"start": int(time.time()), "src": "observed" if fresh else "first-seen"}
                 self.jobs = dict(list(self.jobs.items())[-50:])
                 save_json(JOBS_FILE, self.jobs)
-        if key and state in ("FINISH", "FAILED") and self.prev_state in ACTIVE_STATES:
-            self.jobs.setdefault(key, {})["end"] = int(time.time())
-            save_json(JOBS_FILE, self.jobs)
+        # the job's end is when the model is done, not when the printer finishes purifying the air
+        if key and (print_done(p) or (state in ("FINISH", "FAILED") and self.prev_state in ACTIVE_STATES)):
+            rec = self.jobs.setdefault(key, {})
+            if "end" not in rec:
+                rec["end"] = int(time.time())
+                save_json(JOBS_FILE, self.jobs)
         self.prev_state = state
 
     def wanted_media(self):
@@ -1588,7 +1606,7 @@ class Hub:
                 if not online:
                     return None  # printer state unknown: hold the current framing
                 state = str(self.report.get("gcode_state") or "").upper()
-                mode = "printing" if state in CROP_PRINTING_STATES else "idle"
+                mode = "printing" if state in CROP_PRINTING_STATES and not print_done(self.report) else "idle"
             return mode, list(st["cropPrint"] if mode == "printing" else st["cropIdle"])
 
     def view(self) -> dict:
