@@ -4,9 +4,12 @@ A locally hosted, transparent HTML overlay for streaming Bambu Lab X2D prints wi
 progress, time left, elapsed time, layers, both nozzle temperatures, bed and chamber temperatures, the plate
 preview rendered by the slicer, the filament in use and AMS slots (optionally also the model title, designer and
 MakerWorld link). Six switchable layouts are included, and the accent colour follows the filament being printed.
-It can also pan the camera crop in OBS smoothly when a print starts or ends.
+It can also pan the camera crop in OBS smoothly when a print starts or ends, and draw a Winamp-style two-channel
+audio meter from OBS's own levels.
 
 No wall-clock times (ETA, clock) are shown on purpose: viewers are in other time zones, durations aren't.
+
+![A frame of the live stream: the lower-third layout with the model preview, progress, temperatures, filament and audio meter over the printer camera](docs/stream.jpg)
 
 | Glass | Lower third | HUD |
 |---|---|---|
@@ -14,12 +17,12 @@ No wall-clock times (ETA, clock) are shown on purpose: viewers are in other time
 | **Sidebar** | **Orb** | **Minimal** |
 | ![sidebar](docs/sidebar.jpg) | ![orb](docs/orb.jpg) | ![minimal](docs/minimal.jpg) |
 
-*(Screenshots use demo data over a frame of the stream.)*
+*(Screenshots: the overlay with live data from a print, over a frame of the camera.)*
 
 ## Quick start
 
 ```bash
-cp .env.example .env            # then fill in IP + access code (already done here)
+cp .env.example .env            # then fill in the printer IP + access code
 ./tools/build-app.sh            # builds "Bambu Overlay.app" (needs Xcode command line tools)
 open "Bambu Overlay.app"        # menu-bar app that runs server.py; allow "local network" when asked
 ```
@@ -35,16 +38,21 @@ Rebuilding the app changes its signature, so macOS may ask again.
 
 `python3 server.py` (Python 3.10+, standard library only) still works anywhere the network isn't restricted.
 
+**No printer?** Without `.env` the server starts in demo mode: run `python3 server.py` and open
+`http://127.0.0.1:8787/preview?demo=1` to see a simulated print (add `&layout=hud`, `ticker`, … to switch layouts).
+
 | URL | What |
 |---|---|
 | `http://127.0.0.1:8787/` | **The overlay**: add it to OBS as a Browser source |
 | `http://127.0.0.1:8787/control` | Control panel: layout, options, OBS crop, live previews, printer status |
 | `http://127.0.0.1:8787/preview` | The overlay on top of a frame of the stream (accepts the same URL params) |
-| `http://miniquest.local:8787/control` | The same from any device on your network (phone, tablet, second PC) |
+| `http://<your-mac>.local:8787/control` | The same from any device on your network (phone, tablet, second PC); the server prints the exact name at startup |
 
 The server listens on the whole local network by default (`OVERLAY_HOST=0.0.0.0`). Anyone on your LAN can open
 the control panel and change overlay/crop settings, but nothing reaches the printer. Set `OVERLAY_HOST=127.0.0.1`
 to keep it to this Mac.
+
+![The control panel: live overlay preview, printer and OBS status, layout options and a read-only badge](docs/control.jpg)
 
 ### OBS
 
@@ -197,3 +205,15 @@ cache/               settings, job start times, cached plate previews (safe to d
 Data sources and field meanings were cross-checked against
 [ha-bambulab](https://github.com/greghesp/ha-bambulab) (temperature packing, AMS slot encoding, stage names)
 and verified against a live X2D (firmware 01.02.00.00).
+
+## Status
+
+A personal streaming tool, built and tested only with a Bambu Lab X2D on macOS. The code falls back to the
+single-nozzle report fields of other Bambu models, but that path has not met a real printer yet. The server never
+sends commands to the printer, so the worst case is a wrong number on screen.
+
+It was built with Claude Code in one session; [PROMPTS.md](PROMPTS.md) is the prompt log.
+
+## License
+
+[MIT](LICENSE)

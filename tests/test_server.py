@@ -422,6 +422,13 @@ class ParsingTests(unittest.TestCase):
             self.assertTrue(worker._load_cached({"key": "k"}))
         hub.set_media.assert_called_once_with("k", {"weightG": 15.2, "v": server.MEDIA_CACHE_V}, None)
 
+    def test_config_without_printer_allows_demo_only(self):
+        env = {k: v for k, v in server.os.environ.items() if not k.startswith(("BAMBU_", "OVERLAY_", "OBS_"))}
+        with mock.patch.object(server, "load_env", return_value={}), mock.patch.dict(server.os.environ, env, clear=True):
+            cfg = server.Config()  # used to sys.exit()
+        self.assertFalse(cfg.has_printer)
+        self.assertEqual((cfg.host, cfg.port), ("0.0.0.0", 8787))
+
     def test_cert_cn_picks_subject_not_issuer(self):
         der = (b"\x30\x00" + b"\x06\x03\x55\x04\x03\x0c\x13BBL Device CA N6-V2"
                + b"\x30\x00" + b"\x06\x03\x55\x04\x03\x0c\x0f20P0TESTSERIAL1")

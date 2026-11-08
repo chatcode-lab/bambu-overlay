@@ -133,8 +133,8 @@ class Config:
         self.obs_url = env.get("OBS_WS_URL", "")
         self.obs_password = env.get("OBS_WS_PASSWORD", "")
         self.obs_source = env.get("OBS_SOURCE", "X2D")
-        if not self.ip or not self.access_code:
-            sys.exit("Missing BAMBU_X2D_IP / BAMBU_X2D_ACCESS_KEY in .env")
+        # without a printer the server still runs, so the layouts can be tried in demo mode (/?demo=1)
+        self.has_printer = bool(self.ip and self.access_code)
 
 
 def load_json(path: Path, default):
@@ -1743,10 +1743,14 @@ def main():
     cfg = Config()
     CACHE_DIR.mkdir(exist_ok=True)
     hub = Hub(cfg)
-    for worker in (SsdpWatcher(hub), ReadOnlyMqtt(hub), MediaWorker(hub), ObsCropController(hub), ObsMeterReader(hub)):
+    printer = [SsdpWatcher(hub), ReadOnlyMqtt(hub), MediaWorker(hub)] if cfg.has_printer else []
+    for worker in printer + [ObsCropController(hub), ObsMeterReader(hub)]:
         worker.start()
     server = OverlayHTTPServer((cfg.host, cfg.port), make_handler(hub))
     base = f"http://{'127.0.0.1' if cfg.host in ('0.0.0.0', '') else cfg.host}:{cfg.port}"
+    if not cfg.has_printer:
+        hub.mqtt_status = "no printer configured"
+        log.warning("No printer configured (BAMBU_X2D_IP / BAMBU_X2D_ACCESS_KEY in .env): demo only, %s/?demo=1", base)
     log.info("Overlay (OBS browser source, 1280x720): %s/", base)
     log.info("Control panel (layouts & options):     %s/control", base)
     log.info("Preview over stream frame:              %s/preview", base)
