@@ -1528,7 +1528,7 @@ class Hub:
 
     def push_meter(self, levels: list[float] | None):
         with self.cond:
-            if levels is None and self.meter is None:
+            if levels == self.meter:   # e.g. silence: OBS keeps sending zeros 20x/s, nothing to relay
                 return
             self.meter = levels
             self.meter_seq += 1

@@ -187,7 +187,7 @@
   for (const [key, name, desc] of LAYOUTS) {
     const b = document.createElement('button');
     b.className = 'lay'; b.dataset.layout = key;
-    b.innerHTML = `<div class="stagebox"><img src="preview-bg.jpg" alt="" loading="lazy"><iframe tabindex="-1" src="/?layout=${key}&demo=auto&embed=1"></iframe></div><div class="meta"><b>${name}</b><span>${desc}</span></div>`;
+    b.innerHTML = `<div class="stagebox"><img src="preview-bg.jpg" alt="" loading="lazy"><iframe tabindex="-1" src="/?layout=${key}&demo=auto&embed=1&lite=1"></iframe></div><div class="meta"><b>${name}</b><span>${desc}</span></div>`;
     b.onclick = () => save({ layout: key });
     gallery.append(b);
   }

@@ -58,8 +58,12 @@ html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background:
 /* ---------- shared bits */
 .status { display: flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--ink2); white-space: nowrap; min-width: 0; }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--st); box-shadow: 0 0 0 3px color-mix(in srgb, var(--st) 22%, transparent), 0 0 10px var(--st); flex: none; }
-#stage[data-state=running] .dot, #stage[data-state=prepare] .dot { animation: pulse 2s ease-in-out infinite; }
-@keyframes pulse { 50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--st) 0%, transparent), 0 0 14px var(--st); } }
+.dot { position: relative; }
+.dot::after { content: ""; position: absolute; inset: -5px; border-radius: 50%; opacity: 0;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--st) 55%, transparent), transparent); }
+/* "breathing" halo in a few discrete steps: a handful of repaints per second instead of one per frame */
+#stage[data-state=running] .dot::after, #stage[data-state=prepare] .dot::after { animation: breathe 2.4s steps(6, jump-none) infinite alternate; }
+@keyframes breathe { from { opacity: .1; } to { opacity: .9; } }
 
 .cover { position: relative; display: grid; place-items: center; overflow: hidden;
   background: radial-gradient(closest-side, var(--acc-soft), transparent 100%); }
@@ -71,11 +75,9 @@ html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background:
   background: linear-gradient(90deg, var(--acc-lo), var(--accent) 65%, var(--acc-hi));
   box-shadow: 0 0 16px color-mix(in srgb, var(--accent) 65%, transparent);
   transition: width 1.2s cubic-bezier(.2,.8,.2,1); }
-#stage[data-state=running] .bar > i::after { content: ""; position: absolute; inset: 0;
-  background: linear-gradient(100deg, transparent 30%, rgba(255,255,255,.55) 50%, transparent 70%);
-  background-size: 300% 100%; animation: sheen 3.4s linear infinite; mix-blend-mode: soft-light; }
+.bar > i::after { content: ""; position: absolute; inset: 0 0 50% 0; border-radius: inherit;
+  background: linear-gradient(rgba(255,255,255,.28), rgba(255,255,255,0)); }
 #stage[data-state=pause] .bar > i { background: repeating-linear-gradient(-45deg, var(--warn) 0 7px, color-mix(in oklab, var(--warn), black 30%) 7px 14px); }
-@keyframes sheen { from { background-position: 150% 0; } to { background-position: -150% 0; } }
 
 .credit { display: flex; gap: 12px; font-size: 12px; color: var(--ink3); white-space: nowrap; overflow: hidden; }
 .credit > span { display: inline-flex; align-items: center; gap: 5px; min-width: 0; flex: none; }
@@ -95,11 +97,10 @@ html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background:
 .chip b { font-family: var(--f-num); font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
 .chip i { font-style: normal; font-family: var(--f-num); color: var(--ink3); font-size: 12px; font-variant-numeric: tabular-nums; }
 .chip.heating .ic, .chip.heating b { color: var(--heat); }
-.chip.heating .ic { animation: glowheat 1.6s ease-in-out infinite; }
+.chip.heating .ic { filter: drop-shadow(0 0 3px var(--heat)); }
 .chip.holding .ic { color: var(--acc-hi); }
 .chip.active { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent); }
 .chip.off { opacity: .62; }
-@keyframes glowheat { 50% { filter: drop-shadow(0 0 4px var(--heat)); } }
 
 /* ===================================================================== VU METER (Winamp-ish) */
 /* No container: semi-transparent LED segments straight on the overlay background, soft glow only. */
@@ -107,7 +108,7 @@ html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background:
   display: grid; grid-template-columns: auto auto; column-gap: 3px; row-gap: 4px; text-shadow: none; }
 .vu-ch { display: flex; gap: 1px; }
 .vu[data-vu=v] .vu-ch { flex-direction: column-reverse; }
-.vu-seg { background: rgba(255,255,255,.07); border-radius: 1px; transition: background-color .08s, opacity .08s; }
+.vu-seg { background: rgba(255,255,255,.07); border-radius: 1px; }
 .vu-seg.on { background: var(--c); opacity: .78; box-shadow: 0 0 6px color-mix(in srgb, var(--c) 55%, transparent); }
 .vu-seg.pk { background: #fff; opacity: .7; box-shadow: 0 0 5px rgba(255,255,255,.5); }
 .vu[data-vu=v] .vu-seg { width: 13px; height: 3px; }
@@ -281,8 +282,7 @@ html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background:
 .hud-cover .ph { width: 50%; height: 50%; fill: none; stroke: var(--accent); stroke-width: 1.2; }
 .hud-cover .scan { position: absolute; left: 0; right: 0; height: 22%; top: 0;
   background: linear-gradient(to bottom, transparent, color-mix(in srgb, var(--accent) 30%, transparent) 85%, var(--accent));
-  opacity: .5; animation: scan 3.6s ease-in-out infinite; mix-blend-mode: screen; }
-@keyframes scan { 0% { top: -22%; } 100% { top: 100%; } }
+  opacity: .5; }
 .hud-side { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; }
 .mono-fil { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
 .mono-fil b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; }
@@ -380,3 +380,6 @@ html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background:
 .m-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: rgba(255,255,255,.07); }
 .m-bar > i { position: absolute; inset: 0 auto 0 0; width: calc(var(--p, 0) * 1%); background: linear-gradient(90deg, var(--acc-lo), var(--accent), var(--acc-hi));
   box-shadow: 0 0 12px var(--accent); transition: width 1.2s cubic-bezier(.2,.8,.2,1); }
+
+/* ===================================================================== LITE (static thumbnails) */
+#stage.lite *, #stage.lite *::before, #stage.lite *::after { animation: none !important; transition: none !important; }

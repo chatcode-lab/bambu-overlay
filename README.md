@@ -132,6 +132,26 @@ Yes. The X2D gets its address from your router over DHCP (Wi-Fi, `wlan0`). Two s
 2. **Recommended**: create a DHCP reservation (static lease) for the printer's MAC address in your router, so the
    IP in `.env` stays correct and other tools (Bambu Studio LAN mode, Home Assistant) keep working too.
 
+## Resource usage
+
+Built to run all day in the background:
+
+| Part | CPU (Apple Silicon) | Memory |
+|---|---|---|
+| `server.py` (printer + OBS crop + meter relay, overlay connected) | ~0.5% | ~18 MB |
+| menu-bar app | ~0.15% | ~15 MB |
+| overlay page, lower third with live meter (headless Chrome, software rendering) | ~3% | |
+| control panel with 7 previews open | ~4% | |
+
+How it stays low:
+* There are no endless repaint animations. The status dot "breathes" in 6 discrete steps, and the progress bar gloss is static.
+* The audio meter redraws at 24 fps only while it's on screen and audio is moving. It stops completely when hidden,
+  silent, or when the page isn't visible. The server doesn't relay repeated identical meter frames.
+* Gallery thumbnails in the control panel are static (`?lite=1`: no animation, refreshed every 5 s).
+* The printer pushes one status report a second. The 3MF model file is fetched once per job and cached.
+
+For the absolute minimum, turn off the audio meter (`meter`) in the control panel.
+
 ## Configuration (`.env`)
 
 | Key | |

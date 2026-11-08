@@ -22,6 +22,9 @@
 
   let view = null;
   let serverDownSince = Date.now();
+  // lite: static thumbnails (control-panel gallery): no animations, no meter loop, re-render every 5 s
+  const LITE = params.has('lite');
+  if (LITE) stage.classList.add('lite');
   let assetsSeen = null;
   function checkAssets(v) {   // web files changed on the server -> reload (OBS browser sources cache otherwise)
     if (!v?.assets) return;
@@ -334,7 +337,19 @@
     if (!levels) { vu.lastData = 0; return; }
     vu.target = [toDb(levels[0]), toDb(levels[1])];   // RMS magnitude per channel (OBS mixer's main bar)
     vu.lastData = performance.now();
+    vuKick();
   }
+  // The loop only runs while a meter is on screen and something moves: 24 fps (OBS sources render at ~30),
+  // stopped entirely when hidden, silent and settled, or when the page itself is in the background.
+  const VU_FRAME_MS = 1000 / 24;
+  let vuRunning = false, vuVisible = false;
+  function vuKick() {
+    if (vuRunning || !vuVisible || LITE || document.hidden) return;
+    vuRunning = true;
+    vu.lastFrame = performance.now();
+    setTimeout(vuFrame, VU_FRAME_MS);
+  }
+  document.addEventListener('visibilitychange', vuKick);
   function vuBuild(el) {
     const n = +el.dataset.segs || 16;
     const seg = (i) => {
@@ -354,11 +369,11 @@
     const kick = Math.exp(-beat * 7), wob = Math.sin(t * 9.3) * 0.5 + Math.sin(t * 23.1) * 0.5;
     return [-22 + kick * 12 + wob * 2 + Math.random() * 1.5, -23 + kick * 11 + wob * 2.5 + Math.random() * 1.5];
   }
-  function vuFrame(now) {
-    requestAnimationFrame(vuFrame);
+  function vuFrame() {
+    const now = performance.now();
+    if (!vuVisible || document.hidden) { vuRunning = false; return; }
     const dt = Math.min(0.1, (now - vu.lastFrame) / 1000 || 0);
     vu.lastFrame = now;
-    if (!vuEls.length || !vuEls.some((el) => el.offsetParent)) return;   // none visible
     const live = now - vu.lastData < 1200;
     const target = live ? vu.target : (demoActive ? demoBeat(now) : [-Infinity, -Infinity]);
     const t = [Math.max(target[0], -90), Math.max(target[1], -90)];
@@ -373,8 +388,10 @@
       if (frac[c] >= vu.peak[c]) { vu.peak[c] = frac[c]; vu.hold[c] = now + 650; }
       else if (now > vu.hold[c]) vu.peak[c] = Math.max(0, vu.peak[c] - 0.55 * dt);
     }
+    // silence and everything has fallen to zero: stop until the next meter frame (onMeter kicks it again)
+    const settled = !demoActive && frac[0] === 0 && frac[1] === 0 && vu.peak[0] === 0 && vu.peak[1] === 0;
     for (const el of vuEls) {
-      if (!el.offsetParent || !el._segs) continue;
+      if (!el._segs || !el.offsetParent) continue;
       const n = el._segs[0].length;
       for (let c = 0; c < 2; c++) {
         const lit = Math.round(frac[c] * n);
@@ -388,8 +405,9 @@
         el._state[c] = [lit, pk];
       }
     }
+    if (settled && !live) { vuRunning = false; return; }
+    setTimeout(vuFrame, VU_FRAME_MS);
   }
-  requestAnimationFrame(vuFrame);
 
   // ------------------------------------------------------------------ mount + bind
   function mount(layout) {
@@ -464,6 +482,8 @@
     stage.style.setProperty('--accent', accent);
     stage.classList.toggle('hidden', layout === 'none' || (s.idle === 'hide' && !d.job.hasJob && !demo));
     bind(m, d);
+    vuVisible = !stage.classList.contains('hidden') && vuEls.some((el) => el.offsetParent);
+    vuKick();
     if (!stage.classList.contains('ready')) requestAnimationFrame(() => stage.classList.add('ready'));
   }
 
@@ -477,12 +497,13 @@
       if (e.origin !== location.origin) return;
       if (e.data?.type === 'bambu-meter') return onMeter(e.data.levels);
       if (e.data?.type !== 'bambu-state') return;
+      const first = !view;
       view = e.data.view;
       serverDownSince = view ? 0 : (serverDownSince || Date.now());
-      render();
+      if (!LITE || first) render();
     });
   } else {
     connect();
   }
-  setInterval(render, 1000);
+  setInterval(render, LITE ? 5000 : 1000);
 })();
