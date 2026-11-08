@@ -1,0 +1,12 @@
+# secrets / local state
+.env
+cache/
+
+# build output
+Bambu Overlay.app/
+__pycache__/
+*.pyc
+.DS_Store
+
+# personal screenshots used while designing (not needed in the repo)
+Screenshot *.png

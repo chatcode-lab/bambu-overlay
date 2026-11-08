@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bambu Overlay</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;600;700&family=Silkscreen&display=swap">
+<link rel="stylesheet" href="overlay.css">
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-nozzle" viewBox="0 0 24 24"><path d="M6 3h12v5H6z"/><path d="M8 8h8v4l-2.5 3.5h-3L8 12z"/><path d="M12 15.5V19"/><path d="M9.5 21.2h5"/></symbol>
+    <symbol id="i-bed" viewBox="0 0 24 24"><path d="M3 17.5h18"/><path d="M5 17.5V21M19 17.5V21"/><path d="M8 4.5c-1.2 1.5 1.2 3 0 4.5s1.2 3 0 4.5M12 4.5c-1.2 1.5 1.2 3 0 4.5s1.2 3 0 4.5M16 4.5c-1.2 1.5 1.2 3 0 4.5s1.2 3 0 4.5"/></symbol>
+    <symbol id="i-chamber" viewBox="0 0 24 24"><path d="M10 13.5V5a2 2 0 1 1 4 0v8.5a4 4 0 1 1-4 0z"/><path d="M12 9v6.5"/></symbol>
+    <symbol id="i-layers" viewBox="0 0 24 24"><path d="M12 3 3 7.5l9 4.5 9-4.5z"/><path d="m3 12 9 4.5 9-4.5"/><path d="m3 16.5 9 4.5 9-4.5"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.2 2"/></symbol>
+    <symbol id="i-flag" viewBox="0 0 24 24"><path d="M5 21V4"/><path d="M5 4h12l-2.5 4.5L17 13H5"/></symbol>
+    <symbol id="i-cube" viewBox="0 0 24 24"><path d="M12 2.5 3.5 7v10l8.5 4.5 8.5-4.5V7z"/><path d="M3.5 7 12 11.5 20.5 7"/><path d="M12 11.5v10"/></symbol>
+    <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></symbol>
+    <symbol id="i-drop" viewBox="0 0 24 24"><path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z"/></symbol>
+    <symbol id="i-speed" viewBox="0 0 24 24"><path d="M4 16a8 8 0 1 1 16 0"/><path d="m12 16 4-5.5"/></symbol>
+    <symbol id="i-note" viewBox="0 0 24 24"><path d="M9 18V5l11-2v13"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
+  </defs>
+</svg>
+
+<div id="stage" data-state="offline"></div>
+
+<!-- ============================================================ GLASS: frosted card -->
+<template id="tpl-glass">
+  <section class="w glass" data-at>
+    <div class="vu g-vu" data-if="meterOn" data-vu="v" data-segs="10"></div>
+    <div class="g-head">
+      <div class="cover g-cover"><img data-src="cover" alt=""><svg class="ph" data-ifnot="cover"><use href="#i-cube"/></svg></div>
+      <div class="g-info">
+        <div class="status"><i class="dot"></i><span data-t="label"></span><span class="g-stage" data-if="stage" data-t="stage"></span></div>
+        <div class="g-name" data-t="name"></div>
+        <div class="credit" data-if="creditLine">
+          <span data-if="designer"><svg class="ic"><use href="#i-user"/></svg><span data-t="designer"></span></span>
+          <span data-if="mw"><svg class="ic"><use href="#i-link"/></svg><span data-t="mw"></span></span>
+        </div>
+        <div class="g-nums" data-if="showProgress">
+          <div class="g-pct num"><span data-t="pct"></span><small>%</small></div>
+          <div class="g-left" data-if="left"><b class="num" data-t="left"></b><span>left</span></div>
+          <div class="g-left done" data-if="isDone"><svg class="ic"><use href="#i-check"/></svg><span data-t="doneTxt"></span></div>
+        </div>
+      </div>
+    </div>
+    <div class="bar" data-if="showProgress"><i data-p="pct"></i></div>
+    <div class="g-meta" data-if="showProgress">
+      <span><svg class="ic"><use href="#i-layers"/></svg>Layer <b class="num" data-t="layerTxt"></b></span>
+      <span data-if="el"><svg class="ic"><use href="#i-clock"/></svg><span data-t="elLabel"></span> <b class="num" data-t="el"></b></span>
+    </div>
+    <div class="g-temps" data-list="temps" data-variant="chip"></div>
+    <div class="g-fil" data-if="showAms">
+      <div class="g-fil-main" data-list="filaments" data-variant="line"></div>
+      <div data-list="ams" data-variant="dots"></div>
+    </div>
+  </section>
+</template>
+
+<!-- ============================================================ TICKER: lower-third band -->
+<template id="tpl-ticker">
+  <section class="w ticker">
+    <!-- big model preview in the lower-left corner, rising above the band; fills up as layers print -->
+    <div class="t-hero" data-if="isJob">
+      <i class="hero-glow"></i>
+      <div class="build" data-build>
+        <img class="ghost" data-src="cover" alt="">
+        <img class="solid" data-src="cover" alt="">
+        <i class="edge"></i>
+      </div>
+      <svg class="ph" data-ifnot="cover"><use href="#i-cube"/></svg>
+      <span class="hero-plate" data-if="plateTxt" data-t="plateTxt"></span>
+    </div>
+    <div class="t-title">
+      <div class="t-name" data-t="name"></div>
+      <div class="status"><i class="dot"></i><span data-t="statusTxt"></span><span class="t-by" data-if="designer">· by <span data-t="designer"></span></span></div>
+    </div>
+    <div class="t-row">
+      <div class="t-cell t-pct num" data-if="showProgress"><b data-t="pct"></b><small>%</small></div>
+      <div class="t-cell" data-if="left"><label><svg class="ic"><use href="#i-clock"/></svg>Time left</label><b class="num" data-t="left"></b></div>
+      <div class="t-cell" data-if="el"><label><svg class="ic"><use href="#i-flag"/></svg><span data-t="elLabel"></span></label><b class="num" data-t="el"></b></div>
+      <div class="t-cell" data-if="showProgress"><label><svg class="ic"><use href="#i-layers"/></svg>Layer</label><b class="num" data-t="layerTxt"></b></div>
+      <div class="t-temps" data-list="temps" data-variant="cell"></div>
+      <div class="t-fil" data-if="showAms" data-list="filaments" data-variant="cell"></div>
+      <div class="t-cell t-audio" data-if="meterOn"><label><svg class="ic"><use href="#i-note"/></svg>Audio</label><div class="vu t-vu" data-vu="h" data-segs="14"></div></div>
+    </div>
+    <div class="t-bar"><i data-p="pctOrZero"></i></div>
+  </section>
+</template>
+
+<!-- ============================================================ HUD: sci-fi corners -->
+<template id="tpl-hud">
+  <section class="w hud">
+    <i class="hud-corner c-tl"></i><i class="hud-corner c-tr"></i><i class="hud-corner c-bl"></i><i class="hud-corner c-br"></i>
+
+    <div class="hud-panel hud-job">
+      <div class="hud-kicker"><i class="dot"></i>BAMBU LAB X2D <span class="dim">// LIVE<span data-if="elClock"> · T+<span class="num" data-t="elClock"></span></span></span></div>
+      <div class="hud-name" data-t="name"></div>
+      <dl class="hud-kv">
+        <dt>STATUS</dt><dd data-t="statusUpper"></dd>
+        <dt data-if="showProgress">LAYER</dt><dd data-if="showProgress" class="num" data-t="layerTxt"></dd>
+        <dt data-if="speedTxt">SPEED</dt><dd data-if="speedTxt" data-t="speedUpper"></dd>
+        <dt data-if="designer">DESIGN</dt><dd data-if="designer" data-t="designerUpper"></dd>
+      </dl>
+      <div class="hud-seg" data-if="showProgress" data-list="segments"></div>
+    </div>
+
+    <div class="hud-ring" data-if="showProgress">
+      <svg viewBox="0 0 120 120">
+        <circle class="r-ticks" cx="60" cy="60" r="57"/>
+        <circle class="r-track" cx="60" cy="60" r="49"/>
+        <circle class="r-prog" cx="60" cy="60" r="49" pathLength="100" data-dash="pct"/>
+        <circle class="r-inner" cx="60" cy="60" r="41"/>
+      </svg>
+      <div class="hud-ring-txt"><b class="num"><span data-t="pct"></span><small>%</small></b><span data-if="leftClock">T-<em class="num" data-t="leftClock"></em></span><span data-if="isDone">COMPLETE</span></div>
+      <div class="hud-eta" data-if="el"><span data-t="elUpper"></span> <b class="num" data-t="el"></b></div>
+    </div>
+
+    <div class="hud-panel hud-therm">
+      <div class="hud-title">THERMAL</div>
+      <div data-list="temps" data-variant="gauge"></div>
+    </div>
+
+    <div class="hud-panel hud-model">
+      <div class="hud-cover"><img data-src="cover" alt=""><svg class="ph" data-ifnot="cover"><use href="#i-cube"/></svg><i class="scan"></i></div>
+      <div class="hud-side">
+        <div class="hud-title">MATERIAL</div>
+        <div data-list="filaments" data-variant="mono"></div>
+        <div data-if="showAms" data-list="ams" data-variant="mono"></div>
+      </div>
+    </div>
+  </section>
+</template>
+
+<!-- ============================================================ SIDEBAR: dashboard column -->
+<template id="tpl-sidebar">
+  <section class="w sidebar" data-side>
+    <div class="status s-status"><i class="dot"></i><span data-t="label"></span><span class="s-stage" data-if="stage" data-t="stage"></span></div>
+    <div class="cover s-cover"><img data-src="cover" alt=""><svg class="ph" data-ifnot="cover"><use href="#i-cube"/></svg><span class="s-plate" data-if="plateTxt" data-t="plateTxt"></span></div>
+    <div class="s-name" data-t="name"></div>
+    <div class="credit" data-if="creditLine">
+      <span data-if="designer"><svg class="ic"><use href="#i-user"/></svg><span data-t="designer"></span></span>
+      <span data-if="mw"><svg class="ic"><use href="#i-link"/></svg><span data-t="mw"></span></span>
+    </div>
+    <div class="s-prog" data-if="showProgress">
+      <div class="s-pct num"><span data-t="pct"></span><small>%</small></div>
+      <div class="bar"><i data-p="pct"></i></div>
+    </div>
+    <div class="s-grid" data-if="showProgress">
+      <div><label>Time left</label><b class="num" data-t="leftOrDash"></b></div>
+      <div><label data-t="elLabel"></label><b class="num" data-t="elOrDash"></b></div>
+      <div><label>Layer</label><b class="num" data-t="layerTxt"></b></div>
+      <div><label data-t="totalLabel"></label><b class="num" data-t="totalOrDash"></b></div>
+    </div>
+    <div class="s-sec" data-list="temps" data-variant="row"></div>
+    <div class="s-sec" data-if="showAms" data-list="ams" data-variant="spools"></div>
+    <div class="s-foot"><span data-if="weightTxt"><svg class="ic"><use href="#i-cube"/></svg><span data-t="weightTxt"></span></span><span data-if="speedTxt"><svg class="ic"><use href="#i-speed"/></svg><span data-t="speedTxt"></span></span></div>
+  </section>
+</template>
+
+<!-- ============================================================ ORB: model inside a progress ring -->
+<template id="tpl-orb">
+  <section class="w orb" data-at>
+    <div class="o-disc">
+      <svg viewBox="0 0 200 200" class="o-ring">
+        <circle class="r-ticks" cx="100" cy="100" r="96"/>
+        <circle class="r-track" cx="100" cy="100" r="88"/>
+        <circle class="r-prog" cx="100" cy="100" r="88" pathLength="100" data-dash="pctOrZero"/>
+      </svg>
+      <div class="cover o-cover"><img data-src="cover" alt=""><svg class="ph" data-ifnot="cover"><use href="#i-cube"/></svg></div>
+      <div class="o-pct num" data-if="showProgress"><span data-t="pct"></span><small>%</small></div>
+    </div>
+    <div class="o-info">
+      <div class="status"><i class="dot"></i><span data-t="statusTxt"></span></div>
+      <div class="o-name" data-t="name"></div>
+      <div class="o-line" data-if="left"><svg class="ic"><use href="#i-clock"/></svg><b class="num" data-t="left"></b><span>left</span><span class="o-sep" data-if="el"></span><b class="num" data-t="el"></b><span data-if="el">elapsed</span></div>
+      <div class="o-line" data-if="isDone"><svg class="ic"><use href="#i-check"/></svg><span data-t="doneTxt"></span></div>
+      <div class="o-line dim" data-if="showProgress"><svg class="ic"><use href="#i-layers"/></svg><span>Layer</span><b class="num" data-t="layerTxt"></b></div>
+      <div class="o-temps" data-list="temps" data-variant="mini"></div>
+    </div>
+  </section>
+</template>
+
+<!-- ============================================================ MINIMAL: hairline + pill -->
+<template id="tpl-minimal">
+  <section class="w minimal" data-at>
+    <div class="m-pill">
+      <i class="dot"></i>
+      <b class="num" data-if="showProgress"><span data-t="pct"></span>%</b>
+      <span class="m-txt" data-ifnot="showProgress" data-t="statusTxt"></span>
+      <span class="m-item" data-if="left"><b class="num" data-t="left"></b> left</span>
+      <span class="m-item" data-if="el"><b class="num" data-t="el"></b> <span data-t="elLower"></span></span>
+      <span class="m-item" data-if="isDone">Complete</span>
+      <span class="vu m-vu" data-if="meterOn" data-vu="h" data-segs="12"></span>
+    </div>
+  </section>
+  <div class="m-bar"><i data-p="pctOrZero"></i></div>
+</template>
+
+<template id="tpl-none"></template>
+
+<script src="overlay.js"></script>
+</body>
+</html>

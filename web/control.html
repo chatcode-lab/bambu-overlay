@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Overlay Control</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@600;700&display=swap">
+<style>
+  :root { --bg: #0b0d12; --panel: #141821; --panel2: #1b2030; --line: #262c3b; --ink: #eef1f7; --ink2: #a6adbd; --ink3: #6f7789; --acc: #4fe3c1; --ok: #4ade80; --bad: #f87171; --warn: #fbbf24; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 Inter, system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+  header { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 16px 22px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: rgba(11,13,18,.92); backdrop-filter: blur(10px); z-index: 5; }
+  h1 { font: 700 18px "Space Grotesk", Inter, sans-serif; margin: 0; letter-spacing: -.01em; }
+  h2 { font: 600 12px Inter, sans-serif; letter-spacing: .1em; text-transform: uppercase; color: var(--ink3); margin: 0 0 12px; }
+  .pill { display: inline-flex; align-items: center; gap: 8px; padding: 5px 12px; border-radius: 99px; background: var(--panel); border: 1px solid var(--line); color: var(--ink2); font-size: 12.5px; white-space: nowrap; }
+  .pill i { width: 8px; height: 8px; border-radius: 50%; background: var(--ink3); }
+  .pill.on i { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+  .pill.off i { background: var(--bad); }
+  .ro { margin-left: auto; color: var(--ok); border-color: rgba(74,222,128,.3); }
+  main { padding: 22px; display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 22px; max-width: 1500px; margin: 0 auto; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 18px; }
+  .stagebox { position: relative; aspect-ratio: 16/9; border-radius: 12px; overflow: hidden; background: #000; }
+  .stagebox img, .stagebox iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; object-fit: cover; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+  .gallery { grid-column: 1 / -1; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+  .lay { text-align: left; padding: 0; border-radius: 14px; border: 1px solid var(--line); background: var(--panel2); color: inherit; cursor: pointer; overflow: hidden; font: inherit; transition: border-color .2s, transform .2s; }
+  .lay:hover { transform: translateY(-2px); border-color: #3a4256; }
+  .lay.sel { border-color: var(--acc); box-shadow: 0 0 0 1px var(--acc), 0 8px 30px rgba(79,227,193,.15); }
+  .lay .stagebox { border-radius: 0; pointer-events: none; }
+  .lay .meta { padding: 10px 14px 12px; }
+  .lay b { font-weight: 600; }
+  .lay span { display: block; color: var(--ink3); font-size: 12.5px; }
+  .field { margin-bottom: 16px; }
+  .field > label { display: block; font-size: 12px; font-weight: 600; color: var(--ink2); margin-bottom: 7px; }
+  .seg { display: flex; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 3px; gap: 3px; }
+  .seg button { flex: 1; border: 0; background: transparent; color: var(--ink2); padding: 7px 6px; border-radius: 7px; font: 500 12.5px Inter, sans-serif; cursor: pointer; white-space: nowrap; }
+  .seg button.sel { background: var(--panel2); color: var(--ink); box-shadow: inset 0 0 0 1px #343c50; }
+  .corners { display: grid; grid-template-columns: repeat(5, 1fr); }
+  input[type=range] { width: 100%; accent-color: var(--acc); }
+  input[type=color] { width: 42px; height: 32px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); padding: 2px; cursor: pointer; }
+  .tog { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-top: 1px solid var(--line); font-size: 13px; color: var(--ink2); }
+  .tog input { width: 36px; height: 20px; appearance: none; background: var(--line); border-radius: 99px; position: relative; cursor: pointer; transition: background .2s; }
+  .tog input::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: left .2s; }
+  .tog input:checked { background: var(--acc); }
+  .tog input:checked::after { left: 18px; }
+  code, .url { font: 12.5px ui-monospace, "SF Mono", Menlo, monospace; }
+  .url { display: flex; gap: 8px; align-items: center; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 8px 8px 8px 12px; }
+  .url span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .btn { border: 1px solid var(--line); background: var(--panel2); color: var(--ink); border-radius: 8px; padding: 6px 12px; font: 500 12.5px Inter, sans-serif; cursor: pointer; }
+  .btn:hover { border-color: #3a4256; }
+  ol { margin: 10px 0 0; padding-left: 18px; color: var(--ink2); font-size: 13px; }
+  ol li { margin: 4px 0; }
+  .kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; font-size: 12.5px; color: var(--ink2); }
+  .kv dt { color: var(--ink3); }
+  .kv dd { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .muted { color: var(--ink3); font-size: 12.5px; }
+  .sel { width: 100%; background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; font: 500 13px Inter, sans-serif; }
+  .cropgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+  .pair { display: flex; align-items: center; gap: 8px; }
+  .pair input { width: 86px; background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; font: 500 13px ui-monospace, "SF Mono", Menlo, monospace; }
+  .pair span { color: var(--ink3); font-size: 12.5px; margin-right: 8px; }
+  .pill.warn i { background: var(--warn); }
+  @media (max-width: 900px) { .cropgrid { grid-template-columns: 1fr; } }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; padding: 14px; } header { padding: 12px 14px; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Bambu X2D Overlay</h1>
+  <span class="pill" id="conn"><i></i><span>Connecting…</span></span>
+  <span class="pill" id="job"><span>—</span></span>
+  <span class="pill" id="obs"><i></i><span>OBS</span></span>
+  <span class="pill ro" title="The server only subscribes to status and downloads the job file; it never sends commands.">🔒 Read-only</span>
+</header>
+
+<main>
+  <section class="card">
+    <h2>Live overlay (what OBS shows)</h2>
+    <div class="stagebox"><img src="preview-bg.jpg" alt=""><iframe id="live" title="live overlay"></iframe></div>
+    <div class="row">
+      <label class="muted"><input type="checkbox" id="liveDemo"> Use demo data when nothing is printing</label>
+      <a class="btn" href="/preview" target="_blank">Open full-size preview ↗</a>
+    </div>
+  </section>
+
+  <aside class="card" id="opts">
+    <h2>Options</h2>
+    <div class="field"><label>Accent colour</label>
+      <div class="row" style="margin:0">
+        <div class="seg" style="flex:1"><button data-accent="auto">Filament colour</button><button data-accent="custom">Custom</button></div>
+        <input type="color" id="accentPick" value="#4fe3c1">
+      </div>
+    </div>
+    <div class="field"><label>Corner (glass, orb, minimal)</label>
+      <div class="seg corners" data-key="position"><button data-v="auto">Auto</button><button data-v="tl">↖</button><button data-v="tr">↗</button><button data-v="bl">↙</button><button data-v="br">↘</button></div>
+    </div>
+    <div class="field"><label>Sidebar side</label>
+      <div class="seg" data-key="side"><button data-v="left">Left</button><button data-v="right">Right</button></div>
+    </div>
+    <div class="field"><label>Size <span class="muted" id="scaleVal"></span></label>
+      <input type="range" id="scale" min="0.6" max="1.6" step="0.05">
+    </div>
+    <div class="field"><label>Job name</label>
+      <div class="seg" data-key="name"><button data-v="file">File name</button><button data-v="title">Model title</button></div>
+    </div>
+    <div class="field"><label>When nothing is printing</label>
+      <div class="seg" data-key="idle"><button data-v="show">Show printer status</button><button data-v="hide">Hide overlay</button></div>
+    </div>
+    <div class="tog">AMS / filament slots <input type="checkbox" data-key="ams"></div>
+    <div class="tog">Designer & MakerWorld credit <input type="checkbox" data-key="credit"></div>
+    <div class="tog">Model preview builds up layer by layer <input type="checkbox" data-key="build"></div>
+    <div class="tog">Audio meter (OBS levels, Winamp style) <input type="checkbox" data-key="meter"></div>
+    <div class="field" style="margin-top:8px"><label>Meter source <span class="muted" id="meterStatus"></span></label>
+      <select id="meterInput" class="sel"><option value="">All unmuted audio (loudest input)</option></select>
+    </div>
+    <div class="tog">Demo mode (simulated print on stream) <input type="checkbox" data-key="demo"></div>
+  </aside>
+
+  <section class="card gallery" id="cropCard">
+    <h2>Camera crop in OBS</h2>
+    <div class="cropgrid">
+      <div>
+        <div class="tog" style="border-top:0;padding-top:0">Move the camera crop when printing starts / stops <input type="checkbox" data-key="obsCrop"></div>
+        <div class="field"><label>Mode</label>
+          <div class="seg" data-key="cropMode"><button data-v="auto">Follow printer</button><button data-v="printing">Force printing</button><button data-v="idle">Force idle</button></div>
+        </div>
+        <p class="muted" id="obsStatus">—</p>
+      </div>
+      <div>
+        <div class="field"><label>Printing crop (px from top / bottom of the camera)</label>
+          <div class="pair"><input type="number" min="0" max="4000" step="1" data-crop="cropPrint" data-i="0"><span>top</span><input type="number" min="0" max="4000" step="1" data-crop="cropPrint" data-i="1"><span>bottom</span></div>
+        </div>
+        <div class="field"><label>Idle crop</label>
+          <div class="pair"><input type="number" min="0" max="4000" step="1" data-crop="cropIdle" data-i="0"><span>top</span><input type="number" min="0" max="4000" step="1" data-crop="cropIdle" data-i="1"><span>bottom</span></div>
+        </div>
+        <div class="field"><label>Transition <span class="muted" id="durVal"></span></label>
+          <input type="range" id="cropDuration" min="0" max="6" step="0.1">
+        </div>
+        <p class="muted">Keep top + bottom the same in both modes (360 now) so the view pans without zooming. Only the top/bottom crop of the camera source is changed; everything else stays as set in OBS.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="card gallery">
+    <h2>Layouts: click to switch the live overlay</h2>
+    <div class="grid" id="gallery"></div>
+  </section>
+
+  <section class="card">
+    <h2>OBS setup</h2>
+    <div class="url"><span id="obsUrl"></span><button class="btn" data-copy="obsUrl">Copy</button></div>
+    <ol>
+      <li>Sources → <b>+</b> → <b>Browser</b>, paste the URL, set <b>Width 1280</b>, <b>Height 720</b> (or 1920×1080, since it scales).</li>
+      <li>Put it above your camera source and stretch it to the canvas.</li>
+      <li>Optional: <b>Docks → Custom Browser Docks</b>, add <code id="dockUrl"></code> to switch layouts from inside OBS.</li>
+      <li>A layout pinned in the URL ignores this panel, e.g. <code>/?layout=hud</code>, <code>&amp;scale=1.2</code>, <code>&amp;accent=ff8800</code>.</li>
+    </ol>
+  </section>
+
+  <aside class="card">
+    <h2>Printer</h2>
+    <dl class="kv" id="kv"></dl>
+  </aside>
+</main>
+
+<script>
+(() => {
+  const LAYOUTS = [
+    ['glass', 'Glass card', 'Frosted card with preview, progress, temps and filament.'],
+    ['ticker', 'Lower third', 'Full-width band along the bottom with a glowing progress line.'],
+    ['hud', 'HUD', 'Sci-fi corners: ring timer, thermal gauges, material scan.'],
+    ['sidebar', 'Sidebar', 'Dashboard column with AMS spools and a stats grid.'],
+    ['orb', 'Orb', 'The model inside a progress ring, with a compact info tab.'],
+    ['minimal', 'Minimal', 'Hairline progress bar and a small status pill.'],
+    ['none', 'Hidden', 'Nothing on screen (e.g. for "be right back" scenes).'],
+  ];
+  let settings = {};
+  const $ = (s, r = document) => r.querySelector(s);
+  const base = location.origin;
+  $('#obsUrl').textContent = base + '/';
+  $('#dockUrl').textContent = base + '/control';
+
+  const gallery = $('#gallery');
+  for (const [key, name, desc] of LAYOUTS) {
+    const b = document.createElement('button');
+    b.className = 'lay'; b.dataset.layout = key;
+    b.innerHTML = `<div class="stagebox"><img src="preview-bg.jpg" alt="" loading="lazy"><iframe tabindex="-1" src="/?layout=${key}&demo=auto&embed=1"></iframe></div><div class="meta"><b>${name}</b><span>${desc}</span></div>`;
+    b.onclick = () => save({ layout: key });
+    gallery.append(b);
+  }
+
+  function setLive() {
+    $('#live').src = '/?embed=1' + ($('#liveDemo').checked ? '&demo=auto' : '');
+  }
+  $('#liveDemo').onchange = setLive;
+  setLive();
+
+  async function save(patch) {
+    const r = await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) });
+    if (r.ok) { settings = await r.json(); paint(); }
+  }
+
+  function paint() {
+    for (const b of gallery.children) b.classList.toggle('sel', b.dataset.layout === settings.layout);
+    for (const seg of document.querySelectorAll('.seg[data-key]'))
+      for (const b of seg.children) b.classList.toggle('sel', String(settings[seg.dataset.key]) === b.dataset.v);
+    for (const cb of document.querySelectorAll('input[type=checkbox][data-key]')) cb.checked = !!settings[cb.dataset.key];
+    const custom = settings.accent && settings.accent !== 'auto';
+    for (const b of document.querySelectorAll('[data-accent]')) b.classList.toggle('sel', (b.dataset.accent === 'custom') === !!custom);
+    if (custom) $('#accentPick').value = settings.accent;
+    $('#scale').value = settings.scale; $('#scaleVal').textContent = `${Math.round(settings.scale * 100)}%`;
+    for (const inp of document.querySelectorAll('[data-crop]'))
+      if (document.activeElement !== inp) inp.value = settings[inp.dataset.crop]?.[+inp.dataset.i] ?? '';
+    $('#cropDuration').value = settings.cropDuration; $('#durVal').textContent = `${(+settings.cropDuration).toFixed(1)} s`;
+  }
+  for (const inp of document.querySelectorAll('[data-crop]'))
+    inp.addEventListener('change', () => {
+      const key = inp.dataset.crop, pair = [...(settings[key] || [0, 0])];
+      pair[+inp.dataset.i] = Math.max(0, Math.round(+inp.value || 0));
+      save({ [key]: pair });
+    });
+  $('#cropDuration').addEventListener('input', (e) => { $('#durVal').textContent = `${(+e.target.value).toFixed(1)} s`; });
+  $('#cropDuration').addEventListener('change', (e) => save({ cropDuration: parseFloat(e.target.value) }));
+
+  for (const seg of document.querySelectorAll('.seg[data-key]'))
+    seg.addEventListener('click', (e) => { const v = e.target.closest('button')?.dataset.v; if (v) save({ [seg.dataset.key]: v }); });
+  for (const cb of document.querySelectorAll('input[type=checkbox][data-key]'))
+    cb.addEventListener('change', () => save({ [cb.dataset.key]: cb.checked }));
+  for (const b of document.querySelectorAll('[data-accent]'))
+    b.onclick = () => save({ accent: b.dataset.accent === 'auto' ? 'auto' : $('#accentPick').value });
+  $('#accentPick').addEventListener('input', (e) => save({ accent: e.target.value }));
+  $('#scale').addEventListener('input', (e) => { $('#scaleVal').textContent = `${Math.round(e.target.value * 100)}%`; });
+  $('#scale').addEventListener('change', (e) => save({ scale: parseFloat(e.target.value) }));
+  for (const b of document.querySelectorAll('[data-copy]'))
+    b.onclick = () => { navigator.clipboard?.writeText($('#' + b.dataset.copy).textContent); b.textContent = 'Copied'; setTimeout(() => (b.textContent = 'Copy'), 1200); };
+
+  const ago = (t) => { if (!t) return 'never'; const s = Math.round(Date.now() / 1000 - t); return s < 2 ? 'just now' : s < 120 ? `${s}s ago` : `${Math.round(s / 60)}m ago`; };
+  const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  let last = null;
+  function status() {
+    const v = last;
+    const conn = $('#conn');
+    if (!v) { conn.className = 'pill off'; conn.lastChild.textContent = 'Server unreachable'; return; }
+    conn.className = 'pill ' + (v.online ? 'on' : 'off');
+    conn.lastChild.textContent = v.online ? `Printer online · ${v.printer.ip}` : `Printer offline · ${v.printer.status}`;
+    const j = v.job;
+    $('#job').lastChild.textContent = j.hasJob ? `${j.label} · ${j.progress}% · ${j.fileName || j.title}` : j.label;
+    const o = v.obs || {};
+    const obsOk = (o.status || '').startsWith('connected');
+    $('#obs').className = 'pill ' + (obsOk ? 'on' : (settings.obsCrop ? 'warn' : ''));
+    $('#obs').lastChild.textContent = obsOk ? `OBS · ${o.target || 'holding'}${o.crop ? ` ${o.crop[0]}/${o.crop[1]}` : ''}` : 'OBS · ' + (settings.obsCrop ? 'not connected' : 'off');
+    $('#obsStatus').textContent = `Status: ${o.status || '—'}${o.crop ? ` · current crop top ${o.crop[0]}, bottom ${o.crop[1]}` : ''}${o.target ? ` · target: ${o.target}` : ''}`;
+    const n = v.temps.nozzles.map((x) => `${x.side || ''} ${x.cur}°/${x.tgt}°`).join('  ');
+    const rows = [
+      ['IP', v.printer.ip], ['Serial', '…' + v.printer.serialTail], ['MQTT', v.printer.status], ['Last report', ago(v.printer.lastReport)],
+      ['Wi-Fi', v.printer.wifi || '—'], ['Job file', j.task || '—'], ['Model', j.title ? `${j.title}${j.designer ? ' by ' + j.designer : ''}` : '—'],
+      ['Model data', v.printer.media], ['OBS source', `${o.source || '—'} (${o.items || 0} in scenes)`], ['Nozzles', n], ['Bed', `${v.temps.bed.cur}°/${v.temps.bed.tgt}°`],
+      ['Chamber', v.temps.chamber ? `${v.temps.chamber.cur}°` : '—'],
+    ];
+    $('#kv').innerHTML = rows.map(([k, val]) => `<dt>${k}</dt><dd title="${esc(val)}">${esc(val)}</dd>`).join('');
+  }
+
+  const relay = (frame) => frame.contentWindow?.postMessage({ type: 'bambu-state', view: last }, location.origin);
+  for (const f of document.querySelectorAll('iframe')) f.addEventListener('load', () => relay(f));
+  $('#meterInput').addEventListener('change', (e) => save({ meterInput: e.target.value }));
+  function meterOptions(v) {
+    const sel = $('#meterInput'), names = v?.obs?.meterInputs || [], cur = settings.meterInput || '';
+    const muted = new Set(v?.obs?.meterMuted || []);
+    const want = ['', ...new Set([...names, ...(cur ? [cur] : [])])];
+    const label = (n) => (n ? `${n}${muted.has(n) ? ' (muted, ignored)' : ''}` : 'All unmuted audio (loudest input)');
+    if ([...sel.options].map((o) => o.textContent).join('\n') !== want.map(label).join('\n'))
+      sel.innerHTML = want.map((n) => `<option value="${esc(n)}">${esc(label(n))}</option>`).join('');
+    sel.value = cur;
+    $('#meterStatus').textContent = v?.obs?.meter ? `(${v.obs.meter})` : '';
+  }
+  const es = new EventSource('/api/events');
+  es.addEventListener('meter', (e) => {
+    const levels = JSON.parse(e.data);
+    for (const f of document.querySelectorAll('iframe')) f.contentWindow?.postMessage({ type: 'bambu-meter', levels }, location.origin);
+  });
+  es.onmessage = (e) => {
+    last = JSON.parse(e.data);
+    for (const f of document.querySelectorAll('iframe')) relay(f);
+    const fresh = JSON.stringify(last.settings);
+    if (fresh !== JSON.stringify(settings)) { settings = last.settings; paint(); }
+    meterOptions(last);
+    status();
+  };
+  es.onerror = () => { last = null; status(); for (const f of document.querySelectorAll('iframe')) relay(f); };
+  setInterval(status, 1000);
+})();
+</script>
+</body>
+</html>
