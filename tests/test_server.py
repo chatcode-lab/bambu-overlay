@@ -9,6 +9,7 @@ import tempfile
 import threading
 import time
 import unittest
+import zipfile
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
@@ -351,6 +352,54 @@ class ParsingTests(unittest.TestCase):
                  {"name": "Other.gcode.3mf", "path": "/h/c", "time": 30}]
         self.assertEqual(server.pick_model_file(files, "Double_Stroller(2)_1", "")["path"], "/h/b")
         self.assertIsNone(server.pick_model_file(files, "Missing", "/data/Metadata/plate_1.gcode"))
+
+    def _3mf(self, plate: int) -> Path:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        path = Path(tmp.name) / "job.gcode.3mf"
+        with zipfile.ZipFile(path, "w") as z:
+            z.writestr(f"Metadata/plate_{plate}.gcode", "; gcode")
+            z.writestr(f"Metadata/plate_{plate}.png", f"png-{plate}")
+            z.writestr("Metadata/slice_info.config", SLICE_INFO.replace(b'value="1"', f'value="{plate}"'.encode()))
+        return path
+
+    def test_parse_3mf_uses_the_job_plate(self):
+        meta, cover = server.parse_3mf(self._3mf(3), 3)
+        self.assertEqual((meta["plate"], meta["weightG"], cover), (3, 73.5, b"png-3"))
+        self.assertEqual(server.parse_3mf(self._3mf(2), None)[0]["plate"], 2)  # plate unknown: the sliced one
+
+    def test_parse_3mf_rejects_another_plates_file(self):
+        # same project printed earlier with plate 1; the job now prints plate 3 -> not the job's file (yet)
+        with self.assertRaises(server.StaleModelFile):
+            server.parse_3mf(self._3mf(1), 3)
+
+    def test_stale_file_reason_waits_for_the_new_copy_only_while_the_job_is_young(self):
+        start = 1_000_000
+        want = {"start": start, "src": "observed"}
+        old, new = {"name": "a.gcode.3mf", "time": start - 11 * 3600}, {"name": "a.gcode.3mf", "time": start + 4}
+        self.assertIsNotNone(server.stale_file_reason(old, want, start + 1))
+        self.assertIsNone(server.stale_file_reason(new, want, start + 10))
+        self.assertIsNone(server.stale_file_reason(old, want, start + server.FRESH_FILE_GRACE + 1))  # re-print
+        self.assertIsNone(server.stale_file_reason(old, {"start": start, "src": "first-seen"}, start + 1))
+
+    def test_job_plate(self):
+        self.assertEqual(server.job_plate({"plate_idx": 3}), 3)
+        self.assertEqual(server.job_plate({"gcode_file": "/data/Metadata/plate_4.gcode"}), 4)
+        self.assertIsNone(server.job_plate({}))
+
+    def test_media_cache_ignores_entries_from_older_versions(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        hub = mock.Mock()
+        with mock.patch.object(server, "MEDIA_DIR", Path(tmp.name)):
+            worker = server.MediaWorker(hub)
+            d = worker._dir("k")
+            d.mkdir(parents=True)
+            server.save_json(d / "meta.json", {"weightG": 13.6})
+            self.assertFalse(worker._load_cached({"key": "k"}))
+            server.save_json(d / "meta.json", {"weightG": 15.2, "v": server.MEDIA_CACHE_V})
+            self.assertTrue(worker._load_cached({"key": "k"}))
+        hub.set_media.assert_called_once_with("k", {"weightG": 15.2, "v": server.MEDIA_CACHE_V}, None)
 
     def test_cert_cn_picks_subject_not_issuer(self):
         der = (b"\x30\x00" + b"\x06\x03\x55\x04\x03\x0c\x13BBL Device CA N6-V2"

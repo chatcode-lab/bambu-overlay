@@ -509,9 +509,12 @@ BED_TYPES = {"textured_plate": "Textured PEI", "cool_plate": "Cool Plate", "eng_
              "hot_plate": "High Temp Plate", "supertack_plate": "SuperTack Plate", "pc_plate": "PC Plate"}
 
 
-def parse_3mf(path: Path, plate: int) -> tuple[dict, bytes | None]:
+class StaleModelFile(Exception):
+    """The printer's .3mf with the job's name is not (yet) the one this job prints."""
+
+
+def parse_3mf(path: Path, plate: int | None) -> tuple[dict, bytes | None]:
     meta: dict = {"filaments": []}
-    cover = None
     with zipfile.ZipFile(path) as z:
         names = {n.lower(): n for n in z.namelist()}
 
@@ -519,9 +522,15 @@ def parse_3mf(path: Path, plate: int) -> tuple[dict, bytes | None]:
             real = names.get(name.lower())
             return z.read(real) if real else None
 
-        for cand in (f"Metadata/plate_{plate}.png", "Metadata/plate_1.png"):
-            if (cover := read(cand)):
-                break
+        # A printed .3mf holds the gcode of the plate(s) it was sliced for. A different plate means it is an
+        # older print's file with the same name (the printer saves the new copy a few seconds into the job).
+        sliced = {int(m.group(1)) for n in names if (m := re.fullmatch(r"metadata/plate_(\d+)\.gcode", n))}
+        if plate is None:
+            plate = min(sliced, default=1)
+        if sliced and plate not in sliced:
+            raise StaleModelFile(f"file has plate {', '.join(map(str, sorted(sliced)))}, job prints plate {plate}")
+        meta["plate"] = plate
+        cover = read(f"Metadata/plate_{plate}.png")
         if (si := read("Metadata/slice_info.config")):
             meta.update(parse_slice_info(si, plate))
         if (pj := read(f"Metadata/plate_{plate}.json")):
@@ -546,7 +555,7 @@ def parse_slice_info(data: bytes, plate: int) -> dict:
         return out
     plates = root.findall("plate")
     node = next((p for p in plates if p.find(f"metadata[@key='index'][@value='{plate}']") is not None),
-                plates[0] if plates else None)
+                plates[0] if len(plates) == 1 and plates[0].find("metadata[@key='index']") is None else None)
     if node is None:
         return out
     md = {m.get("key"): m.get("value") for m in node.findall("metadata")}
@@ -605,7 +614,7 @@ class MediaWorker(threading.Thread):
     def _load_cached(self, want) -> bool:
         d = self._dir(want["key"])
         meta = load_json(d / "meta.json", None)
-        if not meta:
+        if not meta or meta.get("v") != MEDIA_CACHE_V:
             return False
         cover = (d / "cover.png").read_bytes() if (d / "cover.png").exists() else None
         self.hub.set_media(want["key"], meta, cover)
@@ -622,6 +631,8 @@ class MediaWorker(threading.Thread):
                     break
             if not match:
                 raise FileNotFoundError(f"no .3mf matching '{want['name']}' on printer storage")
+            if (reason := stale_file_reason(match, want, time.time())):
+                raise StaleModelFile(reason)
             log.info("Media: downloading %s (%.1f MB, read-only)", match["path"], (match.get("size") or 0) / 1e6)
             with tempfile.NamedTemporaryFile(prefix="job-", suffix=".3mf", dir=CACHE_DIR, delete=False) as tmp:
                 tmp_path = Path(tmp.name)
@@ -633,6 +644,7 @@ class MediaWorker(threading.Thread):
                 tmp_path.unlink(missing_ok=True)
         meta["file"] = match.get("name")
         meta["fileTime"] = match.get("time")
+        meta["v"] = MEDIA_CACHE_V
         d = self._dir(want["key"])
         d.mkdir(parents=True, exist_ok=True)
         if cover:
@@ -641,6 +653,28 @@ class MediaWorker(threading.Thread):
         hub.set_media(want["key"], meta, cover)
         log.info("Media: ready - %s by %s, %s g, cover %s", meta.get("title") or want["name"],
                  meta.get("designer") or "?", meta.get("weightG"), "yes" if cover else "no")
+
+
+MEDIA_CACHE_V = 2        # bump to ignore cached job media written by older versions (v1 could hold a stale plate)
+FRESH_FILE_SLACK = 120   # s: allowed difference between the printer's clock and ours
+FRESH_FILE_GRACE = 180   # s: after this, accept an older file (a re-print from the printer's history keeps it)
+
+
+def stale_file_reason(match: dict, want: dict, now: float) -> str | None:
+    """The printer saves a job's .3mf a few seconds after the job starts, so right at the start a same-named
+    file from an earlier print may still be there. Wait for the new copy while the job is young."""
+    start, file_time = want.get("start"), _int(match.get("time"))
+    if want.get("src") != "observed" or not start or not file_time or now - start > FRESH_FILE_GRACE:
+        return None
+    if file_time < start - FRESH_FILE_SLACK:
+        return f"{match.get('name')} is from an earlier print, waiting for the printer to save this job's copy"
+    return None
+
+
+def job_plate(p: dict) -> int | None:
+    """Plate number of the running job: plate_idx, else the N in gcode_file '.../plate_N.gcode'."""
+    return (_int(p.get("plate_idx")) or _int((re.findall(r"plate_(\d+)", str(p.get("gcode_file") or "")) or [0])[0])
+            or None)
 
 
 def _norm_name(s: str) -> str:
@@ -1347,7 +1381,7 @@ def build_view(hub: "Hub") -> dict:
     err = _int(p.get("print_error"))
     task = str(p.get("subtask_name") or "")
     design_id = str(p.get("design_id") or "")
-    plate = _int(p.get("plate_idx")) or _int((re.findall(r"plate_(\d+)", str(p.get("gcode_file") or "")) or [1])[0])
+    plate = job_plate(p) or 1
     job_rec = hub.jobs.get(hub.job_key or "", {})
     started = job_rec.get("start")
     if (not started or job_rec.get("src") == "first-seen") and meta.get("fileTime"):
@@ -1499,9 +1533,11 @@ class Hub:
             p = self.report
             if not self.job_key or not self.serial:
                 return None
+            rec = self.jobs.get(self.job_key, {})
             return {"key": self.job_key, "name": str(p.get("subtask_name") or ""),
-                    "gcode_file": str(p.get("gcode_file") or ""), "plate": _int(p.get("plate_idx")) or 1,
-                    "state": str(p.get("gcode_state") or "").upper()}
+                    "gcode_file": str(p.get("gcode_file") or ""), "plate": job_plate(p),
+                    "state": str(p.get("gcode_state") or "").upper(),
+                    "start": rec.get("start"), "src": rec.get("src")}
 
     def set_media(self, key: str, meta: dict, cover: bytes | None):
         with self.cond:

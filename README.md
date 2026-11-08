@@ -116,6 +116,9 @@ Nothing in this project can make the printer do anything. This is enforced in co
   `LIST_INFO` (1) and `FILE_DOWNLOAD` (4) are allowed; delete, upload or anything else raises before a byte is sent.
   It's used once per job to download the job's `.3mf` from internal storage (`/userdata/model/history/…`)
   for the plate preview, title, designer, filament grams and slicer estimate. Results are cached in `cache/`.
+  The printer saves the job's copy a few seconds after the job starts, so a same-named file left over from an
+  earlier print (for example another plate of the same project) is skipped: the server waits for a file that
+  is newer than the job and contains the plate being printed.
 * **SSDP (UDP 2021)**: passive listening only.
 * FTPS (990) isn't used: on the X2D it only exposes external storage.
 * The access code is only sent after the printer's TLS certificate CN matches the configured serial, so another
