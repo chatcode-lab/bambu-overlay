@@ -5,7 +5,8 @@
   const stage = document.getElementById('stage');
   const DEFAULTS = { layout: 'glass', accent: 'auto', position: 'auto', side: 'left', scale: 1, idle: 'show',
     name: 'file', ams: true, credit: false, byline: false, build: true, meter: true, viewers: true, demo: false,
-    socialTwitch: true, socialTiktok: false, socialX: false, socialInstagram: false, tiktokHandle: '', xHandle: '', instagramHandle: '' };
+    socialTwitch: true, socialTiktok: false, socialX: false, socialInstagram: false, tiktokHandle: '', xHandle: '', instagramHandle: '',
+    socialEvery: 120 };
   const DEFAULT_POS = { glass: 'bl', orb: 'tl', minimal: 'br' };
   const FALLBACK_ACCENT = '#4fe3c1';
 
@@ -171,7 +172,6 @@
     const tw = d.twitch;
     m.viewersTxt = s.viewers !== false && tw?.live && tw.viewers != null ? fmtCount(tw.viewers) : '';
     m.socials = socialGroups(d, s);
-    m.hasSocial = m.socials.length > 0;
     m.mw = s.credit && j.hasJob ? (j.makerworld || '') : '';
     m.creditLine = m.designer || m.mw;
     m.pct = j.progress;
@@ -285,8 +285,18 @@
           const extra = fil.length > 1 ? fil.filter((f) => f !== main).slice(0, 4).map((f) => swatch(f)).join('') : '';
           return `<div class="fil-line">${swatch(main)}${extra}<b>${esc(main.name || main.type)}</b>${main.slot ? `<span class="slot">${esc(main.slot)}</span>` : ''}${totalG ? `<span>${totalG.toFixed(1)} g</span>` : ''}</div>`;
         }
-        case 'cell':
-          return `<div class="t-cell"><label>${icon('cube')}Filament${totalG ? ` · ${totalG.toFixed(0)} g` : ''}</label><b>${swatch(main)}${esc(main.name || main.type)}</b></div>`;
+        case 'cell': {
+          const label = `<label>${icon('cube')}Filament${fil.length > 1 ? 's' : ''}${totalG ? ` · ${totalG.toFixed(0)} g` : ''}</label>`;
+          if (fil.length === 1) return `<div class="t-cell">${label}<b>${swatch(main)}${esc(main.name || main.type)}</b></div>`;
+          // several filaments (both nozzles, or AMS colours): a line each, the one printing now first and bright;
+          // the planned nozzle (L/R) when the job uses both
+          const order = [main, ...fil.filter((f) => f !== main).sort((a, b) => (b.usedG || 0) - (a.usedG || 0))];
+          const twoNozzles = new Set(order.map((f) => f.side).filter(Boolean)).size > 1;
+          const shown = order.slice(0, 2), more = order.length - shown.length;
+          const lines = shown.map((f, i) => `<span class="fl${f.active ? ' on' : ''}">${swatch(f)}<span>${esc(f.name || f.type)}</span>`
+            + `${twoNozzles && f.side ? `<i>${f.side}</i>` : ''}${i === 1 && more > 0 ? `<em>+${more}</em>` : ''}</span>`).join('');
+          return `<div class="t-cell multi">${label}<b class="fls">${lines}</b></div>`;
+        }
         case 'mono':
           return fil.slice(0, 3).map((f) => `<div class="mono-fil">${swatch(f)}<b>${esc((f.name || f.type || '').toUpperCase())}</b><span>${f.slot ? `[${esc(f.slot)}]` : ''} ${f.usedG ? f.usedG.toFixed(1) + 'G' : ''}</span></div>`).join('');
       }
@@ -306,9 +316,6 @@
             <div class="spools">${u.trays.map((t) => `<div class="spool ${t.active ? 'on' : ''}"><span class="ring ${t.remain == null ? 'unk' : ''}" style="--r:${t.remain ?? 0}">${swatch(t)}</span><span class="lbl">${esc(t.empty ? 'Empty' : (t.name || t.type))}</span><span class="slot">${esc(t.slot)}${t.remain != null ? ` · ${t.remain}%` : ''}</span></div>`).join('')}</div>`).join('');
       }
       return '';
-    },
-    socials(d, m) {
-      return m.socials.map((g) => `<span class="soc">${g.nets.map((n) => `<svg class="ic${n === 'instagram' ? ' line' : ''}"><use href="#i-${n}"/></svg>`).join('')}<b>${esc(g.handle)}</b></span>`).join('');
     },
     segments(d, m) {
       const n = 40, on = Math.floor(m.pctOrZero / 100 * n);
@@ -481,14 +488,42 @@
     }
   }
 
-  // Lower third: the socials' right edge follows the audio meter (the row is shorter when idle), else the row end.
-  function alignSocials() {
-    const soc = stage.querySelector('.t-row > .t-social');
-    if (!soc || soc.hidden) return;
-    const a = stage.querySelector('.t-row > .t-audio');
-    const right = a && !a.hidden ? soc.parentElement.clientWidth - (a.offsetLeft + a.offsetWidth) : 0;
-    const v = `${Math.max(0, Math.round(right))}px`;
-    if (soc.style.right !== v) soc.style.right = v;
+  // ------------------------------------------------------------------ socials: flip in next to the print name
+  // Every `socialEvery` seconds each social group flips in (at the right end of the name line), a glint runs
+  // over it, and it flips back out; then the next group. Only these few seconds animate; the rest of the time it's idle.
+  const SOC_FIRST_MS = 8000, SOC_SOON_MS = 1500, SOC_SHOW_MS = 6500, SOC_SWAP_MS = 600;
+  const soc = { key: null, groups: [], every: 120, timer: 0 };
+  function socHtml(g) {
+    const icons = g.nets.map((n, i) => `<svg class="ic${n === 'instagram' ? ' line' : ''}" style="--i:${i}"><use href="#i-${n}"/></svg>`).join('');
+    const letters = [...g.handle].map((c, i) => `<span class="ch" style="--i:${i}">${esc(c)}</span>`).join('');
+    return `<span class="soc in"><span class="soc-cta">Follow</span><span class="soc-ics">${icons}</span><b>${letters}</b></span>`;
+  }
+  function socLater(ms, fn) { clearTimeout(soc.timer); soc.timer = setTimeout(fn, ms); }
+  function socShow(i) {
+    const box = stage.querySelector('.t-soc');
+    if (!box || !soc.groups.length) return;
+    if (i >= soc.groups.length) {   // hidden until the next round
+      box.replaceChildren();
+      return socLater(soc.every * 1000, () => socShow(0));
+    }
+    box.innerHTML = socHtml(soc.groups[i]);
+    socLater(SOC_SHOW_MS, () => {
+      box.firstElementChild?.classList.add('out');
+      socLater(SOC_SWAP_MS, () => socShow(i + 1));
+    });
+  }
+  function updateSocials(m, s) {
+    const groups = LITE ? [] : m.socials;   // gallery thumbnails stay still
+    const every = clamp(+s.socialEvery || 120, 20, 1800);
+    const key = JSON.stringify([groups, every, mounted]);
+    if (key === soc.key) return;
+    const first = soc.key === null;
+    soc.key = key; soc.groups = groups; soc.every = every;
+    clearTimeout(soc.timer);
+    const box = stage.querySelector('.t-soc');
+    box?.replaceChildren();
+    // soon after a settings change (a preview of the new set), a little later after the page loads
+    if (box && groups.length) socLater(first ? SOC_FIRST_MS : SOC_SOON_MS, () => socShow(0));
   }
 
   function fit() {
@@ -521,7 +556,7 @@
     stage.style.setProperty('--accent', accent);
     stage.classList.toggle('hidden', layout === 'none' || (s.idle === 'hide' && !d.job.hasJob && !demo));
     bind(m, d);
-    alignSocials();
+    updateSocials(m, s);
     vuVisible = !stage.classList.contains('hidden') && vuEls.some((el) => el.offsetParent);
     vuKick();
     if (!stage.classList.contains('ready')) requestAnimationFrame(() => stage.classList.add('ready'));

@@ -130,6 +130,18 @@ class ViewTests(HubTestCase):
         self.assertEqual([e["slot"] for e in v["external"]], ["Ext-R"])
         self.assertEqual(v["job"]["predictionSec"], 14370)
 
+    def test_two_nozzle_job_lists_both_filaments_with_their_planned_nozzle(self):
+        ps = json.dumps({"filament_map": ["1", "2", "1"], "physical_extruder_map": ["1", "0"]}).encode()
+        self.assertEqual(server.filament_extruders(ps), {1: 1, 2: 0, 3: 1})   # X2D: 1 = left, 0 = right
+        self.assertEqual(server.filament_extruders(b"not json"), {})
+        self.feed(mapping=[0, 2, 3])
+        self.hub.set_media(self.hub.job_key, {"filaments": [
+            {"id": 1, "type": "PLA", "color": "#F7E6DE", "usedG": 12.0, "extruder": 1},
+            {"id": 2, "type": "PLA", "color": "#7C4B00", "usedG": 8.5, "extruder": 0},
+            {"id": 3, "type": "PETG", "color": "#FFFFFF", "usedG": 0.0, "extruder": 1}]}, None)   # unused: hidden
+        f = self.hub.view()["job"]["filaments"]
+        self.assertEqual([(x["slot"], x["side"], x["active"]) for x in f], [("A1", "L", False), ("A3", "R", True)])
+
     def test_job_filament_colour_follows_the_mapped_tray_not_the_sliced_file(self):
         self.feed(mapping=[65535, 65535, 65535, 65535, 3])  # sliced brown, printer feeds red A4
         self.hub.set_media(self.hub.job_key, server.parse_slice_info(SLICE_INFO, 1), None)
@@ -331,6 +343,12 @@ class TwitchTests(HubTestCase):
         for bad in ("@borkasm", "x.com/karulin", "a b", "<b>"):
             with self.assertRaises(ValueError):
                 self.hub.update_settings({"xHandle": bad})
+        self.assertEqual(self.hub.settings["socialEvery"], 120)
+        self.assertEqual(self.hub.update_settings({"socialEvery": 300})["socialEvery"], 300)
+        self.assertEqual(self.hub.update_settings({"socialEvery": 20})["socialEvery"], 20)
+        for bad in (10, 5000, 2.5, True, "120"):
+            with self.assertRaises(ValueError):
+                self.hub.update_settings({"socialEvery": bad})
 
 
 class CropTargetTests(HubTestCase):

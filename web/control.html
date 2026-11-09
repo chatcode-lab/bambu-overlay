@@ -177,14 +177,16 @@
   </section>
 
   <section class="card gallery" id="socialCard">
-    <h2>Your socials (lower third, under the audio meter)</h2>
+    <h2>Your socials (flip in next to the print name, lower third)</h2>
     <div class="socgrid">
       <div class="tog soc-row"><span>Twitch</span><span class="muted" id="twHandle"></span><input type="checkbox" data-key="socialTwitch"></div>
       <div class="tog soc-row"><span>TikTok</span><input class="txt" data-handle="tiktokHandle" placeholder="username" maxlength="30" autocomplete="off" spellcheck="false"><input type="checkbox" data-key="socialTiktok"></div>
       <div class="tog soc-row"><span>X</span><input class="txt" data-handle="xHandle" placeholder="username" maxlength="30" autocomplete="off" spellcheck="false"><input type="checkbox" data-key="socialX"></div>
       <div class="tog soc-row"><span>Instagram</span><input class="txt" data-handle="instagramHandle" placeholder="username" maxlength="30" autocomplete="off" spellcheck="false"><input type="checkbox" data-key="socialInstagram"></div>
     </div>
-    <p class="muted" style="margin-bottom:0">Platforms with the same username are shown once, with all their logos (e.g. TikTok + Twitch name). The Twitch username is the channel set above.</p>
+    <div class="row" style="justify-content:flex-start;gap:12px"><label class="muted" for="socialEvery">Pop up every</label>
+      <select id="socialEvery" class="sel" style="width:auto"><option value="20">20 s</option><option value="30">30 s</option><option value="45">45 s</option><option value="60">1 min</option><option value="120">2 min</option><option value="180">3 min</option><option value="300">5 min</option><option value="600">10 min</option><option value="900">15 min</option></select></div>
+    <p class="muted" style="margin-bottom:0">From time to time "Follow" plus your logos and username flips in to the right of the print name for a few seconds, one username after another. Platforms with the same username are shown once, with all their logos (e.g. TikTok + Twitch name). The Twitch username is the channel set above. Changing anything here plays them once on the live overlay right away.</p>
   </section>
 
   <section class="card gallery">
@@ -261,12 +263,16 @@
     if (document.activeElement !== $('#twChannel')) $('#twChannel').value = settings.twitchChannel || '';
     for (const inp of document.querySelectorAll('[data-handle]'))
       if (document.activeElement !== inp) inp.value = settings[inp.dataset.handle] || '';
+    const every = $('#socialEvery'), ev = String(settings.socialEvery || 120);
+    if (![...every.options].some((o) => o.value === ev)) every.add(new Option(ev < 60 ? `${ev} s` : `${Math.round(ev / 60)} min`, ev));
+    every.value = ev;
     twHandle();
   }
   function twHandle() {
     const ch = settings.twitchChannel || last?.twitch?.envChannel || '';
     $('#twHandle').textContent = ch ? `${ch} (the channel)` : 'set the channel in the Twitch card';
   }
+  $('#socialEvery').addEventListener('change', (e) => save({ socialEvery: parseInt(e.target.value, 10) }));
   for (const inp of document.querySelectorAll('[data-handle]'))
     inp.addEventListener('change', async () => {
       const v = inp.value.trim().replace(/^.*\/(?=[^/]+\/?$)/, '').replace(/\/$/, '').replace(/^@/, '');

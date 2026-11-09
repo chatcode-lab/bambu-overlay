@@ -81,7 +81,7 @@ DEFAULT_SETTINGS = {
     "demo": False,         # simulate a print (for setting things up)
     "viewers": True,       # live Twitch viewer count (once a channel + app credentials are set up)
     "twitchChannel": "",   # Twitch login name of the channel, e.g. "mychannel"
-    # your socials in the lower third, under the audio meter; the same handle is shown once with all its icons
+    # your socials, flipping in next to the print name (lower third); a shared handle is shown once with all its icons
     "socialTwitch": True,      # handle = the Twitch channel (shown only once a channel is set)
     "socialTiktok": False,
     "socialX": False,
@@ -89,6 +89,7 @@ DEFAULT_SETTINGS = {
     "tiktokHandle": "",
     "xHandle": "",
     "instagramHandle": "",
+    "socialEvery": 120,        # seconds between rounds of socials flipping in next to the print name
     # OBS camera crop automation (obs-websocket)
     "obsCrop": True,       # animate the camera crop in OBS when printing starts / stops
     "cropMode": "auto",    # auto (follow printer) | printing | idle (force one, e.g. while adjusting)
@@ -120,6 +121,7 @@ _SETTING_RULES = {
     "tiktokHandle": lambda v: _handle(v),
     "xHandle": lambda v: _handle(v),
     "instagramHandle": lambda v: _handle(v),
+    "socialEvery": lambda v: isinstance(v, int) and not isinstance(v, bool) and 20 <= v <= 1800,
     "obsCrop": lambda v: isinstance(v, bool),
     "cropMode": lambda v: v in ("auto", "printing", "idle"),
     "cropPrint": lambda v: _crop_pair(v),
@@ -567,6 +569,11 @@ def parse_3mf(path: Path, plate: int | None) -> tuple[dict, bytes | None]:
         cover = read(f"Metadata/plate_{plate}.png")
         if (si := read("Metadata/slice_info.config")):
             meta.update(parse_slice_info(si, plate))
+        if (ps := read("Metadata/project_settings.config")):   # which nozzle each filament is sliced for
+            ext = filament_extruders(ps)
+            for f in meta.get("filaments") or []:
+                if f.get("id") in ext:
+                    f["extruder"] = ext[f["id"]]
         if (pj := read(f"Metadata/plate_{plate}.json")):
             try:
                 bed = json.loads(pj).get("bed_type") or ""
@@ -579,6 +586,19 @@ def parse_3mf(path: Path, plate: int | None) -> tuple[dict, bytes | None]:
                 if key in ("Title", "Designer", "License", "ProfileTitle"):
                     meta[key[0].lower() + key[1:]] = html.unescape(value).strip()
     return meta, cover
+
+
+def filament_extruders(data: bytes) -> dict[int, int]:
+    """Filament id (1-based, as in slice_info) -> the printer's physical extruder id (as in MQTT; on the X2D 0 = right,
+    1 = left). filament_map holds each filament's 1-based logical extruder, physical_extruder_map maps logical ->
+    physical (["1", "0"] on the X2D: logical extruder 1 is the left nozzle)."""
+    try:
+        d = json.loads(data)
+        fmap = [int(x) for x in d.get("filament_map") or []]
+        phys = [int(x) for x in d.get("physical_extruder_map") or []]
+    except (ValueError, TypeError, AttributeError):
+        return {}
+    return {i: phys[logical - 1] for i, logical in enumerate(fmap, start=1) if 1 <= logical <= len(phys)}
 
 
 def parse_slice_info(data: bytes, plate: int) -> dict:
@@ -731,7 +751,7 @@ class MediaWorker(threading.Thread):
         return True
 
 
-MEDIA_CACHE_V = 2        # bump to ignore cached job media written by older versions (v1 could hold a stale plate)
+MEDIA_CACHE_V = 3        # bump to ignore cached job media written by older versions (v1: stale plate, v2: no nozzles)
 FRESH_FILE_SLACK = 120   # s: allowed difference between the printer's clock and ours
 FRESH_FILE_GRACE = 180   # s: after this, accept an older file (a re-print from the printer's history keeps it)
 RECHECK_FOR = 20 * 60    # s: how long after the start to keep looking for a newer copy of an older loaded file
@@ -1620,6 +1640,8 @@ def build_view(hub: "Hub") -> dict:
     mapping = p.get("mapping") or []
     filaments = []
     for f in meta.get("filaments") or []:
+        if f.get("usedG") is not None and f["usedG"] < 0.05:
+            continue   # listed by the slicer but practically unused (e.g. 0.01 m of a support filament)
         fid = f.get("id", 0)
         m = _int(mapping[fid - 1], 0xFFFF) if 0 < fid <= len(mapping) else 0xFFFF
         loc = None if m == 0xFFFF else (m >> 8, m & 0xFF)
@@ -1628,7 +1650,9 @@ def build_view(hub: "Hub") -> dict:
                           # the mapped tray is what is really printing; the sliced colour can be from an older setup
                           "color": (tray or {}).get("color") or f.get("color"), "colors": (tray or {}).get("colors", []),
                           "usedG": f.get("usedG"), "usedM": f.get("usedM"), "slot": (tray or {}).get("slot"),
-                          "remain": (tray or {}).get("remain"), "active": loc is not None and loc == active_loc})
+                          "remain": (tray or {}).get("remain"), "active": loc is not None and loc == active_loc,
+                          # nozzle the slicer planned it for (X2D: extruder 0 = right, 1 = left)
+                          "side": {0: "R", 1: "L"}.get(f.get("extruder")) if dual else None})
     if not filaments and loaded:
         a = next((l for l in loaded if l["active"]), loaded[0])
         filaments.append({"type": a["type"], "name": a["name"], "color": a["color"], "colors": a["colors"],

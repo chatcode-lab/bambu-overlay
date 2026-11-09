@@ -178,20 +178,41 @@ html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background:
 .t-vu { margin-top: 2px; row-gap: 3px; column-gap: 5px; align-items: center; }
 .vu.t-vu[data-vu=h] .vu-seg { width: 5px; height: 7px; }  /* beats the generic .vu[data-vu=h] size */
 .t-title { bottom: 86px; display: flex; flex-direction: column; gap: 2px; text-shadow: var(--shadow-txt); min-width: 0; }  /* status, then the name right above the stats */
-/* the streamer's socials: in the gap between the stats and the progress line, right edge under the audio meter */
-.t-row > .t-social { position: absolute; bottom: -9px; right: 0; border-left: 0; padding: 0; line-height: 16px;
-  display: flex; align-items: baseline; gap: 16px; font-size: 13px; color: rgba(245, 247, 251, .72); white-space: nowrap; isolation: isolate;
-  /* grey but legible over a bright, compressed camera image: a firm dark outline plus a soft shadow ... */
-  text-shadow: 0 0 1px #000, 0 0 2px #000, 0 0 4px rgba(0,0,0,.9), 0 1px 8px rgba(0,0,0,.8); }
-/* ... and a soft local darkening behind the group (no box edges) */
-.t-social::before { content: ""; position: absolute; inset: -8px -24px; z-index: -1; pointer-events: none;
-  background: radial-gradient(closest-side, rgba(7,9,13,.68), rgba(7,9,13,.4) 62%, rgba(7,9,13,0)); }
-.soc { display: inline-flex; align-items: baseline; gap: 6px; }
-.soc .ic { font-size: 14px; fill: currentColor; stroke: none; align-self: center;
-  filter: drop-shadow(0 0 .7px #000) drop-shadow(0 0 1.5px #000) drop-shadow(0 1px 4px rgba(0,0,0,.7)); }
+/* the print name, and the streamer's socials at the right end of its line, on its baseline */
+.t-line { display: flex; align-items: baseline; min-width: 0; }
+.t-line > .t-name { flex: 0 1 auto; min-width: 0; }
+.t-soc { flex: 1 0 auto; display: flex; justify-content: flex-end; align-items: baseline; padding-left: 24px;
+  font-size: 13px; white-space: nowrap;
+  /* grey but legible over a bright, compressed camera image: a firm dark outline plus a soft shadow */
+  --soc-ink: rgba(245, 247, 251, .72);
+  --soc-shadow: 0 0 1px #000, 0 0 2px #000, 0 0 4px rgba(0,0,0,.9), 0 1px 8px rgba(0,0,0,.8);
+  --soc-ic-filter: drop-shadow(0 0 .7px #000) drop-shadow(0 0 1.5px #000) drop-shadow(0 0 0 rgba(255,255,255,0));
+  color: var(--soc-ink); text-shadow: var(--soc-shadow); }
+/* the line sits on the front face of an imaginary cube one line-height deep; it turns around a horizontal axis through
+   the middle of the cube's back face, so it rolls up into place from below the line (and back down to leave) */
+.soc { display: inline-flex; align-items: baseline; gap: 6px; transform-origin: 50% 50% -1.25em; backface-visibility: hidden; }
+.soc-cta { font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: rgba(245, 247, 251, .6); margin-right: 1px; }
+.soc-ics { display: inline-flex; align-items: center; gap: 5px; align-self: center; }
+.soc .ic { font-size: 14px; fill: currentColor; stroke: none; filter: var(--soc-ic-filter); }
 .soc .ic.line { fill: none; stroke: currentColor; stroke-width: 2.1; }
-.soc .ic + .ic { margin-left: -1px; }
 .soc b { font-weight: 500; letter-spacing: .01em; }
+.soc .ch { display: inline-block; }
+/* in: rolls up into view (with a little overshoot); a glint then runs over the logos and letters three times, a pause
+   between passes (each 1.6 s cycle: the glint in its first half, rest in the second); out: rolls back down */
+.soc.in { animation: soc-flip-in .75s cubic-bezier(.25, .9, .3, 1.25) both; }
+.soc.in .ic { animation: soc-icon-glint 1.6s ease-in-out 3 both; animation-delay: calc(var(--i) * 70ms + 1100ms); }
+.soc.in .ch { animation: soc-glint 1.6s ease-in-out 3 both; animation-delay: calc(var(--i) * 45ms + 1250ms); }
+.soc.out { animation: soc-flip-out .55s cubic-bezier(.5, 0, .75, .4) forwards; }
+@keyframes soc-flip-in { from { opacity: 0; transform: perspective(320px) rotateX(-90deg); } 35% { opacity: 1; }
+  to { opacity: 1; transform: perspective(320px) rotateX(0deg); } }
+@keyframes soc-flip-out { from { opacity: 1; transform: perspective(320px) rotateX(0deg); } 65% { opacity: 1; }
+  to { opacity: 0; transform: perspective(320px) rotateX(-90deg); } }
+@keyframes soc-glint {
+  0%, 50%, 100% { color: var(--soc-ink); text-shadow: var(--soc-shadow), 0 0 0 transparent, 0 0 0 transparent; }
+  22% { color: #fff; text-shadow: var(--soc-shadow), 0 0 8px rgba(255,255,255,.85), 0 0 16px var(--accent); } }
+@keyframes soc-icon-glint {
+  0%, 50%, 100% { color: var(--soc-ink); filter: var(--soc-ic-filter); }
+  22% { color: #fff; filter: drop-shadow(0 0 .7px #000) drop-shadow(0 0 1.5px #000) drop-shadow(0 0 6px rgba(255,255,255,.9)); } }
 .t-row { bottom: 18px; height: 62px; display: flex; align-items: center; gap: 0; text-shadow: var(--shadow-txt); }
 .t-row > * { flex: none; }
 .t-row > * + * { border-left: 1px solid rgba(255,255,255,.16); }
@@ -234,6 +255,16 @@ html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background:
 .t-temps > .t-cell + .t-cell { border-left: 1px solid rgba(255,255,255,.06); }
 .t-fil .t-cell b { display: flex; align-items: center; gap: 7px; font-family: var(--f-ui); font-size: 15px; }
 .t-fil .sw { width: 14px; height: 14px; }
+/* several filaments: one compact line each; the cell keeps its label level with the others and grows downwards */
+.t-fil:has(.multi) { align-self: flex-start; padding-top: 13px; }
+.t-fil .t-cell.multi b.fls { flex-direction: column; align-items: flex-start; gap: 1px; font-size: 13.5px; line-height: 16px; }
+.fls .fl { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.fls .fl + .fl { margin-left: 0; }
+.t-fil .fls .sw { width: 11px; height: 11px; }
+.fls .fl i { font-style: normal; font-size: 10.5px; font-weight: 700; color: var(--ink3); margin-left: 0; }
+.fls .fl em { font-style: normal; font-size: 11px; color: var(--ink3); }
+.fls:has(.on) .fl:not(.on) { color: var(--ink3); }
+.fls:has(.on) .fl:not(.on) .sw { opacity: .75; }
 .t-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 5px; background: rgba(255,255,255,.08); }
 .t-bar > i { position: absolute; inset: 0 auto 0 0; width: calc(var(--p, 0) * 1%);
   background: linear-gradient(90deg, var(--acc-lo), var(--accent) 70%, var(--acc-hi));

@@ -85,7 +85,11 @@
     </div>
     <div class="t-title">
       <div class="status"><i class="dot"></i><span data-t="statusTxt"></span><span class="t-by" data-if="designerStatus">· by <span data-t="designerStatus"></span></span><span class="viewers" data-if="viewersTxt"><svg class="ic"><use href="#i-eye"/></svg><span data-t="viewersTxt"></span></span></div>
-      <div class="t-name"><span data-t="name"></span><span class="by" data-if="byline" data-t="byline"></span></div>
+      <!-- the print name; from time to time the streamer's socials flip in, centred in the free space to its right (overlay.js) -->
+      <div class="t-line">
+        <div class="t-name"><span data-t="name"></span><span class="by" data-if="byline" data-t="byline"></span></div>
+        <div class="t-soc"></div>
+      </div>
     </div>
     <div class="t-row">
       <div class="t-cell t-pct num" data-if="showProgress"><b data-t="pct"></b><small>%</small></div>
@@ -95,8 +99,6 @@
       <div class="t-temps" data-list="temps" data-variant="cell"></div>
       <div class="t-fil" data-if="showAms" data-list="filaments" data-variant="cell"></div>
       <div class="t-cell t-audio" data-if="meterOn"><label><svg class="ic"><use href="#i-note"/></svg>Audio</label><div class="vu t-vu" data-vu="h" data-segs="14"></div></div>
-      <!-- the streamer's socials: under the stats, right-aligned with the audio meter (overlay.js) -->
-      <div class="t-social" data-if="hasSocial" data-list="socials"></div>
     </div>
     <div class="t-bar"><i data-p="pctOrZero"></i></div>
   </section>
