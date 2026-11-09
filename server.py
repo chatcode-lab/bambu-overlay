@@ -92,6 +92,12 @@ DEFAULT_SETTINGS = {
     "xHandle": "",
     "instagramHandle": "",
     "socialEvery": 120,        # seconds between rounds of socials flipping in next to the print name
+    # a music credit after the socials in the same round, e.g. "MUSIC ♫ ltbr.fm"; with musicInput set, only while that
+    # OBS audio input is unmuted and actually playing
+    "musicCredit": False,
+    "musicLabel": "Music",
+    "musicText": "",
+    "musicInput": "",
     # OBS camera crop automation (obs-websocket)
     "obsCrop": True,       # animate the camera crop in OBS when printing starts / stops
     "cropMode": "auto",    # auto (follow printer) | printing | idle (force one, e.g. while adjusting)
@@ -126,12 +132,20 @@ _SETTING_RULES = {
     "instagramHandle": lambda v: _handle(v),
     "youtubeHandle": lambda v: _handle(v),
     "socialEvery": lambda v: isinstance(v, int) and not isinstance(v, bool) and 20 <= v <= 1800,
+    "musicCredit": lambda v: isinstance(v, bool),
+    "musicLabel": lambda v: _plain(v, 24),
+    "musicText": lambda v: _plain(v, 60),
+    "musicInput": lambda v: isinstance(v, str) and len(v) <= 256,
     "obsCrop": lambda v: isinstance(v, bool),
     "cropMode": lambda v: v in ("auto", "printing", "idle"),
     "cropPrint": lambda v: _crop_pair(v),
     "cropIdle": lambda v: _crop_pair(v),
     "cropDuration": lambda v: isinstance(v, (int, float)) and 0 <= v <= 10,
 }
+
+
+def _plain(v, n: int) -> bool:   # short single-line display text
+    return isinstance(v, str) and len(v) <= n and not re.search(r"[\x00-\x1f\x7f]", v)
 
 
 def _handle(v) -> bool:   # TikTok / X / Instagram / YouTube usernames (YouTube handles may contain "-")
@@ -1337,6 +1351,24 @@ def aggregate_meter(inputs: list, selected: str = "", muted=frozenset()) -> tupl
     return [round(min(1.0, max(0.0, x)), 4) for x in out], sorted(set(names))
 
 
+AUDIBLE_PEAK = 0.003   # linear peak (about -50 dBFS) above which an input counts as playing
+AUDIBLE_HOLD = 15      # s of silence before it stops counting (pauses between tracks)
+
+
+def note_sound(last_sound: dict, inputs: list, now: float) -> None:
+    """Remember when each input last made a sound (any channel's peak above AUDIBLE_PEAK)."""
+    for inp in inputs or []:
+        name = str(inp.get("inputName") or "")
+        peaks = [float(ch[1] or 0) for ch in inp.get("inputLevelsMul") or [] if len(ch) >= 2]
+        if name and peaks and max(peaks) > AUDIBLE_PEAK:
+            last_sound[name] = now
+
+
+def audible_inputs(last_sound: dict, muted: dict, now: float) -> list[str]:
+    """Inputs that are unmuted and made a sound within AUDIBLE_HOLD seconds."""
+    return sorted(n for n, t in last_sound.items() if now - t < AUDIBLE_HOLD and not muted.get(n))
+
+
 class ObsMeterReader(threading.Thread):
     """Second, read-only OBS connection that only listens to InputVolumeMeters (every 50 ms)."""
 
@@ -1352,9 +1384,13 @@ class ObsMeterReader(threading.Thread):
         self.hub.set_obs(meter=msg)
         self.hub.push_meter(None)
 
+    def _wanted(self) -> bool:   # the audio meter, or a music credit that follows an OBS input
+        st = self.hub.settings
+        return bool(st.get("meter") or (st.get("musicCredit") and st.get("musicInput")))
+
     def run(self):
         while True:
-            if not self.hub.settings.get("meter"):
+            if not self._wanted():
                 self._status("off")
                 time.sleep(2)
                 continue
@@ -1388,13 +1424,20 @@ class ObsMeterReader(threading.Thread):
         url, password = obs_connection_params(self.hub.cfg)
         obs = ObsClient(url, password, events=ObsClient.EVENT_INPUT_VOLUME_METERS | ObsClient.EVENT_INPUTS)
         self.muted: dict[str, bool] = {}
+        last_sound: dict[str, float] = {}
+        audible: list[str] = []
         try:
             obs.ws.sock.settimeout(5)
             seen: list[str] = []
             self._status("live")
-            while self.hub.settings.get("meter"):
+            while self._wanted():
+                now = time.time()
+                if (a := audible_inputs(last_sound, self.muted, now)) != audible:
+                    audible = a
+                    self.hub.set_obs(meterAudible=audible)
                 if not obs.ws.wait_readable(1.0):
-                    self.hub.push_meter([0.0, 0.0, 0.0, 0.0])  # no audio inputs / OBS quiet
+                    if self.hub.settings.get("meter"):
+                        self.hub.push_meter([0.0, 0.0, 0.0, 0.0])  # no audio inputs / OBS quiet
                     continue
                 msg = json.loads(obs.ws.recv_text())
                 d = msg.get("d") or {}
@@ -1410,14 +1453,17 @@ class ObsMeterReader(threading.Thread):
                         except ObsRequestError:
                             self.muted[name] = False
                         self.hub.set_obs(meterMuted=sorted(n for n, m in self.muted.items() if m))
+                note_sound(last_sound, inputs, now)
                 levels, names = aggregate_meter(inputs, self.hub.settings.get("meterInput") or "",
                                                 {n for n, m in self.muted.items() if m})
                 if names != seen:
                     seen = names
                     self.hub.set_obs(meterInputs=names)
-                self.hub.push_meter(levels)
+                if self.hub.settings.get("meter"):
+                    self.hub.push_meter(levels)
         finally:
             obs.close()
+            self.hub.set_obs(meterAudible=[])
 
 # --------------------------------------------------------------------------- state -> view
 
@@ -1762,7 +1808,7 @@ class Hub:
         self.ip_changed = threading.Event()
         self.media_wakeup = threading.Event()
         self.obs = {"status": "starting", "source": cfg.obs_source, "items": 0, "crop": None, "target": None,
-                    "meter": "starting", "meterInputs": [], "meterMuted": []}
+                    "meter": "starting", "meterInputs": [], "meterMuted": [], "meterAudible": []}
         self.meter: list[float] | None = None   # [magL, magR, peakL, peakR], pushed ~20x/s
         self.meter_seq = 0
         self.makers: dict = load_json(MAKERS_FILE, {})   # MakerWorld design id -> resolve_maker() result

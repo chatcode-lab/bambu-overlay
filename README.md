@@ -80,6 +80,7 @@ e.g. one scene with `/?layout=hud` and another with `/?layout=minimal`:
 | `socialTwitch` `socialTiktok` `socialYoutube` `socialX` `socialInstagram` | `0` / `1`: your socials, flipping in next to the print name | Twitch only |
 | `tiktokHandle` `youtubeHandle` `xHandle` `instagramHandle` | usernames without `@` (Twitch uses the channel name) | empty |
 | `socialEvery` | seconds between rounds of socials (20–1800) | `120` |
+| `musicCredit` `musicLabel` `musicText` `musicInput` | music credit after the socials; `musicInput` = OBS input it follows (empty = always) | off, `Music` |
 | `meter` | `0` / `1`: Winamp-style L/R audio meter (needs the OBS WebSocket server) | `1` |
 | `build` | `0` / `1`: the big lower-third model preview fills up layer by layer (unprinted part as a ghost) | `1` |
 | `demo` | `1` simulate a print, `auto` simulate only when idle/offline | off |
@@ -94,7 +95,9 @@ Your own socials appear every couple of minutes (adjustable, 20 s to 30 min) at 
 line, on its baseline: "Follow" with the logos and your username rolls up into view, as if on the face of a turning
 cube, a glint runs over it three times, 3 s apart, and it rolls back down; then the next username. Twitch (your channel)
 is on by default; TikTok, YouTube, X and Instagram are switchable in the control panel. Platforms that share a
-username are shown once with all their logos.
+username are shown once with all their logos. An optional music credit ("Music" + a note + your text, e.g. the
+radio you play) follows in the same round; tied to an OBS audio input, it's shown only while that input is unmuted and
+has played within the last 15 s, so a muted or silent source isn't credited.
 
 The **audio meter** is two segmented L/R bars in an old-Winamp style: LED segments going green→yellow→red,
 peak caps that hold then fall, pixel-font labels. It sits at the bottom-right end of the lower third, in the glass

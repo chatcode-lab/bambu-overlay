@@ -7,6 +7,7 @@
     name: 'file', ams: true, credit: false, byline: false, build: true, meter: true, viewers: true, demo: false,
     socialTwitch: true, socialTiktok: false, socialX: false, socialInstagram: false, socialYoutube: false,
     tiktokHandle: '', xHandle: '', instagramHandle: '', youtubeHandle: '',
+    musicCredit: false, musicLabel: 'Music', musicText: '', musicInput: '',
     socialEvery: 120 };
   const DEFAULT_POS = { glass: 'bl', orb: 'tl', minimal: 'br' };
   const FALLBACK_ACCENT = '#4fe3c1';
@@ -489,42 +490,54 @@
     }
   }
 
-  // ------------------------------------------------------------------ socials: flip in next to the print name
+  // ------------------------------------------------------------------ socials (+ music credit): roll in next to the print name
   // Every `socialEvery` seconds each social group flips in (at the right end of the name line), a glint runs
   // over it, and it flips back out; then the next group. Only these few seconds animate; the rest of the time it's idle.
   const SOC_FIRST_MS = 8000, SOC_SOON_MS = 1500, SOC_SHOW_MS = 10600, SOC_SWAP_MS = 600;   // show: roll in + 3 glints
-  const soc = { key: null, groups: [], every: 120, timer: 0 };
-  function socHtml(g) {
-    const icons = g.nets.map((n, i) => `<svg class="ic${n === 'instagram' ? ' line' : ''}" style="--i:${i}"><use href="#i-${n}"/></svg>`).join('');
-    const letters = [...g.handle].map((c, i) => `<span class="ch" style="--i:${i}">${esc(c)}</span>`).join('');
-    return `<span class="soc in"><span class="soc-cta">Follow</span><span class="soc-ics">${icons}</span><b>${letters}</b></span>`;
+  // Items of a round: each social group ("Follow" + logos + username), then an optional music credit ("Music" + note +
+  // text), shown only if the OBS input it follows is playing when its turn comes.
+  const soc = { key: null, groups: [], music: null, every: 120, timer: 0, audible: [], round: [] };
+  function socHtml(it) {
+    const icons = it.icons.map((n, i) => `<svg class="ic${n === 'instagram' ? ' line' : ''}${n === 'note' ? ' note' : ''}" style="--i:${i}"><use href="#i-${n}"/></svg>`).join('');
+    const letters = [...it.text].map((c, i) => `<span class="ch" style="--i:${i}">${esc(c)}</span>`).join('');
+    return `<span class="soc in"><span class="soc-cta">${esc(it.label)}</span><span class="soc-ics">${icons}</span><b>${letters}</b></span>`;
+  }
+  function socRound() {
+    const items = soc.groups.map((g) => ({ label: 'Follow', icons: g.nets, text: g.handle }));
+    if (soc.music) items.push({ label: soc.music.label, icons: ['note'], text: soc.music.text, input: soc.music.input });
+    return items;
   }
   function socLater(ms, fn) { clearTimeout(soc.timer); soc.timer = setTimeout(fn, ms); }
   function socShow(i) {
     const box = stage.querySelector('.t-soc');
-    if (!box || !soc.groups.length) return;
-    if (i >= soc.groups.length) {   // hidden until the next round
+    if (!box) return;
+    if (i === 0) soc.round = socRound();
+    if (soc.round[i]?.input && !soc.audible.includes(soc.round[i].input)) return socShow(i + 1);   // music not playing
+    if (i >= soc.round.length) {   // hidden until the next round
       box.replaceChildren();
       return socLater(soc.every * 1000, () => socShow(0));
     }
-    box.innerHTML = socHtml(soc.groups[i]);
+    box.innerHTML = socHtml(soc.round[i]);
     socLater(SOC_SHOW_MS, () => {
       box.firstElementChild?.classList.add('out');
       socLater(SOC_SWAP_MS, () => socShow(i + 1));
     });
   }
-  function updateSocials(m, s) {
+  function updateSocials(m, s, d) {
+    soc.audible = d.obs?.meterAudible || [];   // checked when the music credit's turn comes; never cuts an item short
     const groups = LITE ? [] : m.socials;   // gallery thumbnails stay still
+    const music = !LITE && s.musicCredit && String(s.musicText || '').trim()
+      ? { label: String(s.musicLabel || 'Music').trim() || 'Music', text: String(s.musicText).trim(), input: s.musicInput || '' } : null;
     const every = clamp(+s.socialEvery || 120, 20, 1800);
-    const key = JSON.stringify([groups, every, mounted]);
+    const key = JSON.stringify([groups, music, every, mounted]);
     if (key === soc.key) return;
     const first = soc.key === null;
-    soc.key = key; soc.groups = groups; soc.every = every;
+    soc.key = key; soc.groups = groups; soc.music = music; soc.every = every;
     clearTimeout(soc.timer);
     const box = stage.querySelector('.t-soc');
     box?.replaceChildren();
     // soon after a settings change (a preview of the new set), a little later after the page loads
-    if (box && groups.length) socLater(first ? SOC_FIRST_MS : SOC_SOON_MS, () => socShow(0));
+    if (box && (groups.length || music)) socLater(first ? SOC_FIRST_MS : SOC_SOON_MS, () => socShow(0));
   }
 
   function fit() {
@@ -557,7 +570,7 @@
     stage.style.setProperty('--accent', accent);
     stage.classList.toggle('hidden', layout === 'none' || (s.idle === 'hide' && !d.job.hasJob && !demo));
     bind(m, d);
-    updateSocials(m, s);
+    updateSocials(m, s, d);
     vuVisible = !stage.classList.contains('hidden') && vuEls.some((el) => el.offsetParent);
     vuKick();
     if (!stage.classList.contains('ready')) requestAnimationFrame(() => stage.classList.add('ready'));

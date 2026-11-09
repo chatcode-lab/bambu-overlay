@@ -185,9 +185,14 @@
       <div class="tog soc-row"><span>X</span><input class="txt" data-handle="xHandle" placeholder="username" maxlength="30" autocomplete="off" spellcheck="false"><input type="checkbox" data-key="socialX"></div>
       <div class="tog soc-row"><span>Instagram</span><input class="txt" data-handle="instagramHandle" placeholder="username" maxlength="30" autocomplete="off" spellcheck="false"><input type="checkbox" data-key="socialInstagram"></div>
     </div>
+    <div class="socgrid" style="margin-top:6px">
+      <div class="tog soc-row"><span>Music credit</span><input class="txt" data-plain="musicLabel" placeholder="Music" maxlength="24" autocomplete="off" spellcheck="false"><input type="checkbox" data-key="musicCredit"></div>
+      <div class="tog soc-row"><span>Credit text</span><input class="txt" data-plain="musicText" placeholder="e.g. ltbr.fm" maxlength="60" autocomplete="off" spellcheck="false"><span></span></div>
+      <div class="tog soc-row"><span>Only while</span><select id="musicInput" class="sel"></select><span class="muted" id="musicState"></span></div>
+    </div>
     <div class="row" style="justify-content:flex-start;gap:12px"><label class="muted" for="socialEvery">Pop up every</label>
       <select id="socialEvery" class="sel" style="width:auto"><option value="20">20 s</option><option value="30">30 s</option><option value="45">45 s</option><option value="60">1 min</option><option value="120">2 min</option><option value="180">3 min</option><option value="300">5 min</option><option value="600">10 min</option><option value="900">15 min</option></select></div>
-    <p class="muted" style="margin-bottom:0">From time to time "Follow" plus your logos and username flips in to the right of the print name for a few seconds, one username after another. Platforms with the same username are shown once, with all their logos (e.g. TikTok + Twitch name). The Twitch username is the channel set above. Changing anything here plays them once on the live overlay right away.</p>
+    <p class="muted" style="margin-bottom:0">From time to time "Follow" plus your logos and username flips in to the right of the print name for a few seconds, one username after another. Platforms with the same username are shown once, with all their logos (e.g. TikTok + Twitch name). The Twitch username is the channel set above. The music credit ("Music" + a note + your text) comes after them in the same round; set to an OBS audio input, it's included only while that input is unmuted and playing. Changing anything here plays them once on the live overlay right away.</p>
   </section>
 
   <section class="card gallery">
@@ -264,6 +269,8 @@
     if (document.activeElement !== $('#twChannel')) $('#twChannel').value = settings.twitchChannel || '';
     for (const inp of document.querySelectorAll('[data-handle]'))
       if (document.activeElement !== inp) inp.value = settings[inp.dataset.handle] || '';
+    for (const inp of document.querySelectorAll('[data-plain]'))
+      if (document.activeElement !== inp) inp.value = settings[inp.dataset.plain] || '';
     const every = $('#socialEvery'), ev = String(settings.socialEvery || 120);
     if (![...every.options].some((o) => o.value === ev)) every.add(new Option(ev < 60 ? `${ev} s` : `${Math.round(ev / 60)} min`, ev));
     every.value = ev;
@@ -274,6 +281,19 @@
     $('#twHandle').textContent = ch ? `${ch} (the channel)` : 'set the channel in the Twitch card';
   }
   $('#socialEvery').addEventListener('change', (e) => save({ socialEvery: parseInt(e.target.value, 10) }));
+  for (const inp of document.querySelectorAll('[data-plain]'))
+    inp.addEventListener('change', () => save({ [inp.dataset.plain]: inp.value.trim() }));
+  $('#musicInput').addEventListener('change', (e) => save({ musicInput: e.target.value }));
+  function musicOptions(v) {   // OBS audio inputs to follow, plus "always"
+    const sel = $('#musicInput'), cur = settings.musicInput || '', names = v?.obs?.meterInputs || [];
+    const want = ['', ...new Set([...names, ...(cur ? [cur] : [])])];
+    const label = (n) => (n ? `${n} plays` : 'always (no audio check)');
+    if ([...sel.options].map((o) => o.value).join('\n') !== want.join('\n'))
+      sel.innerHTML = want.map((n) => `<option value="${esc(n)}">${esc(label(n))}</option>`).join('');
+    if (document.activeElement !== sel) sel.value = cur;
+    const playing = (v?.obs?.meterAudible || []).includes(cur);
+    $('#musicState').textContent = cur ? (playing ? 'playing now' : 'silent or muted') : '';
+  }
   for (const inp of document.querySelectorAll('[data-handle]'))
     inp.addEventListener('change', async () => {
       const v = inp.value.trim().replace(/^.*\/(?=[^/]+\/?$)/, '').replace(/\/$/, '').replace(/^@/, '');
@@ -384,6 +404,7 @@
     if (fresh !== JSON.stringify(settings)) { settings = last.settings; paint(); }
     meterOptions(last);
     twitchStatus(last);
+    musicOptions(last);
     status();
   };
   es.onerror = () => { last = null; status(); for (const f of document.querySelectorAll('iframe')) relay(f); };

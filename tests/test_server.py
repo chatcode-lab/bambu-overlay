@@ -523,6 +523,26 @@ class ObsCropTests(HubTestCase):
             server.ObsCropController(self.hub)._session()
 
 
+class MusicCreditTests(HubTestCase):
+    def test_an_input_counts_as_playing_while_unmuted_and_recently_audible(self):
+        last = {}
+        loud = [{"inputName": "ltbr.fm", "inputLevelsMul": [[0.2, 0.3, 0.3], [0.2, 0.3, 0.3]]},
+                {"inputName": "MugenRadio", "inputLevelsMul": [[0.0, 0.0, 0.0]]},
+                {"inputName": "X2D", "inputLevelsMul": [[0.1, 0.2, 0.2]]}]
+        server.note_sound(last, loud, 100.0)
+        self.assertEqual(server.audible_inputs(last, {"X2D": True}, 101.0), ["ltbr.fm"])   # muted / silent: no
+        self.assertEqual(server.audible_inputs(last, {}, 100.0 + server.AUDIBLE_HOLD - 1), ["X2D", "ltbr.fm"])
+        self.assertEqual(server.audible_inputs(last, {}, 100.0 + server.AUDIBLE_HOLD + 1), [])   # long silence
+
+    def test_music_credit_settings(self):
+        self.assertFalse(self.hub.settings["musicCredit"])
+        s = self.hub.update_settings({"musicCredit": True, "musicText": "ltbr.fm", "musicLabel": "Music", "musicInput": "ltbr.fm"})
+        self.assertEqual((s["musicText"], s["musicInput"]), ("ltbr.fm", "ltbr.fm"))
+        for bad in ({"musicText": "x" * 61}, {"musicLabel": "two\nlines"}, {"musicText": 5}):
+            with self.assertRaises(ValueError):
+                self.hub.update_settings(bad)
+
+
 class MeterTests(HubTestCase):
     def test_aggregate_loudest_and_selected(self):
         inputs = [{"inputName": "Music", "inputLevelsMul": [[0.2, 0.5, 0.6], [0.1, 0.3, 0.3]]},
