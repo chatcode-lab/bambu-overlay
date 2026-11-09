@@ -38,6 +38,12 @@ html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background:
 }
 #stage.ready { transition: opacity .8s ease, --accent 1.5s ease; }
 #stage.hidden { opacity: 0; }
+/* a value that just changed glows warm for a few seconds, then fades back (overlay.js adds .chg); heating red etc.
+   return once it's over */
+#stage { --chg: #ffd36b; }
+.chg { animation: chg 4s ease-out; }
+@keyframes chg {
+  0%, 20% { color: var(--chg); text-shadow: 0 0 1px rgba(0,0,0,.7), 0 1px 2px rgba(0,0,0,.8), 0 0 12px color-mix(in srgb, var(--chg) 65%, transparent); } }
 #stage[data-state=running]  { --st: var(--ok); }
 #stage[data-state=prepare]  { --st: var(--cool); }
 #stage[data-state=pause]    { --st: var(--warn); }
@@ -235,7 +241,8 @@ html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background:
   box-shadow: 0 0 12px var(--accent), 0 0 3px var(--accent); transition: top 1.2s cubic-bezier(.2,.8,.2,1), opacity .6s; }
 .build.building .edge { opacity: .9; }
 .build.full .ghost { opacity: 0; }
-.hero-plate { position: absolute; left: 6px; bottom: 4px; font-size: 10.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase;
+/* plate badge on the preview, its text on the same baseline as the stats values (isometric previews leave this corner free) */
+.hero-plate { position: absolute; left: 6px; bottom: 18px; font-size: 10.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase;
   color: var(--ink2); padding: 3px 8px; border-radius: 99px; background: rgba(0,0,0,.45); text-shadow: none; }
 .t-by { color: var(--ink3); text-transform: none; font-weight: 500; letter-spacing: 0; overflow: hidden; text-overflow: ellipsis; }
 .t-cell { padding: 0 14px; display: flex; flex-direction: column; gap: 3px; }

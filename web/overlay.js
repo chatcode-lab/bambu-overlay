@@ -261,19 +261,19 @@
       switch (variant) {
         case 'chip':
         case 'mini':
-          return items.map((t) => `<span class="chip ${t.cls}">${icon(t.icon)}${t.side ? `<em>${t.side}</em>` : ''}<b>${t.cur}°</b>${t.tgt && variant === 'chip' ? `<i>/${t.tgt}</i>` : ''}</span>`).join('');
+          return items.map((t) => `<span class="chip ${t.cls}">${icon(t.icon)}${t.side ? `<em>${t.side}</em>` : ''}<b data-k="temp:${t.mono}" data-v="${t.cur}|${t.tgt}">${t.cur}°</b>${t.tgt && variant === 'chip' ? `<i>/${t.tgt}</i>` : ''}</span>`).join('');
         case 'cell': {
           const noz = items.filter((t) => t.icon === 'nozzle');
           const rest = items.filter((t) => t.icon !== 'nozzle');
           const nozCell = noz.length > 1
-            ? `<div class="t-cell"><label>${icon('nozzle')}Nozzles</label><b class="num">${noz.map((t) => `<span class="${t.cls}">${t.cur}°<i>${t.side}</i></span>`).join(' ')}</b></div>`
-            : noz.map((t) => `<div class="t-cell ${t.cls}"><label>${icon('nozzle')}Nozzle</label><b class="num">${t.cur}°${t.tgt ? `<i>/${t.tgt}</i>` : ''}</b></div>`).join('');
-          return nozCell + rest.map((t) => `<div class="t-cell ${t.cls}"><label>${icon(t.icon)}${esc(t.label)}</label><b class="num">${t.cur}°${t.tgt ? `<i>/${t.tgt}</i>` : ''}</b></div>`).join('');
+            ? `<div class="t-cell"><label>${icon('nozzle')}Nozzles</label><b class="num">${noz.map((t) => `<span class="${t.cls}" data-k="temp:${t.mono}" data-v="${t.cur}|${t.tgt}">${t.cur}°<i>${t.side}</i></span>`).join(' ')}</b></div>`
+            : noz.map((t) => `<div class="t-cell ${t.cls}"><label>${icon('nozzle')}Nozzle</label><b class="num" data-k="temp:${t.mono}" data-v="${t.cur}|${t.tgt}">${t.cur}°${t.tgt ? `<i>/${t.tgt}</i>` : ''}</b></div>`).join('');
+          return nozCell + rest.map((t) => `<div class="t-cell ${t.cls}"><label>${icon(t.icon)}${esc(t.label)}</label><b class="num" data-k="temp:${t.mono}" data-v="${t.cur}|${t.tgt}">${t.cur}°${t.tgt ? `<i>/${t.tgt}</i>` : ''}</b></div>`).join('');
         }
         case 'gauge':
-          return items.map((t) => `<div class="gauge ${t.cls}"><span class="lbl ${t.active ? 'act' : ''}">${t.mono}</span><span class="trk"><i style="--p:${clamp(t.cur / t.max * 100, 0, 100).toFixed(1)}"></i>${t.tgt ? `<u style="--t:${clamp(t.tgt / t.max * 100, 0, 100).toFixed(1)}"></u>` : ''}</span><span class="val">${t.cur}<small>/${t.tgt || '--'}°C</small></span></div>`).join('');
+          return items.map((t) => `<div class="gauge ${t.cls}"><span class="lbl ${t.active ? 'act' : ''}">${t.mono}</span><span class="trk"><i style="--p:${clamp(t.cur / t.max * 100, 0, 100).toFixed(1)}"></i>${t.tgt ? `<u style="--t:${clamp(t.tgt / t.max * 100, 0, 100).toFixed(1)}"></u>` : ''}</span><span class="val" data-k="temp:${t.mono}" data-v="${t.cur}|${t.tgt}">${t.cur}<small>/${t.tgt || '--'}°C</small></span></div>`).join('');
         case 'row':
-          return items.map((t) => `<div class="trow ${t.cls}">${icon(t.icon)}<span>${esc(t.label)}</span><b>${t.cur}°</b><i>${t.tgt ? `→ ${t.tgt}°` : 'off'}</i></div>`).join('');
+          return items.map((t) => `<div class="trow ${t.cls}">${icon(t.icon)}<span>${esc(t.label)}</span><b data-k="temp:${t.mono}" data-v="${t.cur}|${t.tgt}">${t.cur}°</b><i>${t.tgt ? `→ ${t.tgt}°` : 'off'}</i></div>`).join('');
       }
       return '';
     },
@@ -285,22 +285,22 @@
       switch (variant) {
         case 'line': {
           const extra = fil.length > 1 ? fil.filter((f) => f !== main).slice(0, 4).map((f) => swatch(f)).join('') : '';
-          return `<div class="fil-line">${swatch(main)}${extra}<b>${esc(main.name || main.type)}</b>${main.slot ? `<span class="slot">${esc(main.slot)}</span>` : ''}${totalG ? `<span>${totalG.toFixed(1)} g</span>` : ''}</div>`;
+          return `<div class="fil-line">${swatch(main)}${extra}<b data-k="fil:main" data-v="${esc(main.name || main.type)}|${esc(main.slot || '')}">${esc(main.name || main.type)}</b>${main.slot ? `<span class="slot">${esc(main.slot)}</span>` : ''}${totalG ? `<span>${totalG.toFixed(1)} g</span>` : ''}</div>`;
         }
         case 'cell': {
           const label = `<label>${icon('cube')}Filament${fil.length > 1 ? 's' : ''}${totalG ? ` · ${totalG.toFixed(0)} g` : ''}</label>`;
-          if (fil.length === 1) return `<div class="t-cell">${label}<b>${swatch(main)}${esc(main.name || main.type)}</b></div>`;
+          if (fil.length === 1) return `<div class="t-cell">${label}<b data-k="fil:main" data-v="${esc(main.name || main.type)}|${esc(main.slot || '')}">${swatch(main)}${esc(main.name || main.type)}</b></div>`;
           // several filaments (both nozzles, or AMS colours): a line each, the one printing now first and bright;
           // the planned nozzle (L/R) when the job uses both
           const order = [main, ...fil.filter((f) => f !== main).sort((a, b) => (b.usedG || 0) - (a.usedG || 0))];
           const twoNozzles = new Set(order.map((f) => f.side).filter(Boolean)).size > 1;
           const shown = order.slice(0, 2), more = order.length - shown.length;
-          const lines = shown.map((f, i) => `<span class="fl${f.active ? ' on' : ''}">${swatch(f)}<span>${esc(f.name || f.type)}</span>`
+          const lines = shown.map((f, i) => `<span class="fl${f.active ? ' on' : ''}" data-k="fil:${esc(f.slot || i)}" data-v="${esc(f.name || f.type)}|${f.active ? 1 : 0}">${swatch(f)}<span>${esc(f.name || f.type)}</span>`
             + `${twoNozzles && f.side ? `<i>${f.side}</i>` : ''}${i === 1 && more > 0 ? `<em>+${more}</em>` : ''}</span>`).join('');
           return `<div class="t-cell multi">${label}<b class="fls">${lines}</b></div>`;
         }
         case 'mono':
-          return fil.slice(0, 3).map((f) => `<div class="mono-fil">${swatch(f)}<b>${esc((f.name || f.type || '').toUpperCase())}</b><span>${f.slot ? `[${esc(f.slot)}]` : ''} ${f.usedG ? f.usedG.toFixed(1) + 'G' : ''}</span></div>`).join('');
+          return fil.slice(0, 3).map((f, i) => `<div class="mono-fil">${swatch(f)}<b data-k="fil:${esc(f.slot || i)}" data-v="${esc(f.name || f.type)}|${f.active ? 1 : 0}">${esc((f.name || f.type || '').toUpperCase())}</b><span>${f.slot ? `[${esc(f.slot)}]` : ''} ${f.usedG ? f.usedG.toFixed(1) + 'G' : ''}</span></div>`).join('');
       }
       return '';
     },
@@ -540,6 +540,47 @@
     if (box && (groups.length || music)) socLater(first ? SOC_FIRST_MS : SOC_SOON_MS, () => socShow(0));
   }
 
+  // ------------------------------------------------------------------ change highlights
+  // A value that changes (viewers, %, layer, status, temperatures, filament) glows for a few seconds so it gets
+  // noticed. Clocks (elapsed, time left) tick every minute and aren't highlighted; temperatures only on a new target
+  // or a move of HL_TEMP_STEP degrees, so slow drift stays calm. A new job, layout or page starts from a fresh baseline.
+  const HL_MS = 4000, HL_TEMP_STEP = 5;
+  const HL_KEYS = new Set(['pct', 'layerTxt', 'statusTxt', 'statusUpper', 'label', 'stage', 'viewersTxt', 'speedTxt',
+    'speedUpper', 'weightTxt']);
+  const hl = { scope: null, base: new Map(), since: new Map() };
+  function hlChanged(key, val) {
+    const was = hl.base.get(key);
+    if (was === undefined) { hl.base.set(key, val); return false; }
+    if (was === val) return false;
+    if (key.startsWith('temp:')) {
+      const [c0, t0] = was.split('|').map(Number), [c1, t1] = val.split('|').map(Number);
+      if (t0 === t1 && Math.abs(c1 - c0) < HL_TEMP_STEP) return false;   // drift: keep the old baseline
+    }
+    hl.base.set(key, val);
+    return true;
+  }
+  function highlight(m, d) {
+    if (LITE) return;
+    const scope = `${mounted}|${demoActive}|${d.job.hasJob ? `${d.job.task}|${d.job.plate}` : ''}`;
+    if (scope !== hl.scope) { hl.scope = scope; hl.base.clear(); hl.since.clear(); }
+    const now = Date.now();
+    for (const key of HL_KEYS) if (key in m && hlChanged(key, String(m[key] ?? ''))) hl.since.set(key, now);
+    for (const el of stage.querySelectorAll('[data-k]'))
+      if (hlChanged(el.dataset.k, el.dataset.v ?? el.textContent)) hl.since.set(el.dataset.k, now);
+    for (const el of stage.querySelectorAll('[data-k], [data-t]')) {
+      const key = el.dataset.k || (HL_KEYS.has(el.dataset.t) ? el.dataset.t : null);
+      const t = key ? hl.since.get(key) : undefined;
+      const on = t !== undefined && now - t < HL_MS;
+      if (on && !el.classList.contains('chg')) {   // (re)rendered elements continue the glow where it was
+        el.style.animationDelay = `${t - now}ms`;
+        el.classList.add('chg');
+      } else if (!on && el.classList.contains('chg')) {
+        el.classList.remove('chg');
+        el.style.animationDelay = '';
+      }
+    }
+  }
+
   function fit() {
     const k = Math.min(innerWidth / 1280, innerHeight / 720);
     stage.style.transform = `translate(${(innerWidth - 1280 * k) / 2}px, ${(innerHeight - 720 * k) / 2}px) scale(${k})`;
@@ -571,6 +612,7 @@
     stage.classList.toggle('hidden', layout === 'none' || (s.idle === 'hide' && !d.job.hasJob && !demo));
     bind(m, d);
     updateSocials(m, s, d);
+    highlight(m, d);
     vuVisible = !stage.classList.contains('hidden') && vuEls.some((el) => el.offsetParent);
     vuKick();
     if (!stage.classList.contains('ready')) requestAnimationFrame(() => stage.classList.add('ready'));
