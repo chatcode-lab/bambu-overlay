@@ -241,9 +241,15 @@ html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background:
   box-shadow: 0 0 12px var(--accent), 0 0 3px var(--accent); transition: top 1.2s cubic-bezier(.2,.8,.2,1), opacity .6s; }
 .build.building .edge { opacity: .9; }
 .build.full .ghost { opacity: 0; }
-/* plate badge on the preview, its text on the same baseline as the stats values (isometric previews leave this corner free) */
-.hero-plate { position: absolute; left: 6px; bottom: 18px; font-size: 10.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase;
-  color: var(--ink2); padding: 3px 8px; border-radius: 99px; background: rgba(0,0,0,.45); text-shadow: none; }
+/* plate badge (left) and heights (right) on the preview, their (last) text line on the same baseline as the stats
+   values (isometric previews leave the bottom corners free) */
+.hero-tags { position: absolute; left: 6px; right: 6px; bottom: 18px; display: flex; align-items: last baseline; gap: 4px; }
+.hero-plate, .hero-z { padding: 3px 7px; background: rgba(0,0,0,.45); text-shadow: none; white-space: nowrap; }
+.hero-plate { border-radius: 99px; font-size: 10.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--ink2); }
+/* two right-aligned lines: layer height (STEP), then current / model height (Z) */
+.hero-z { margin-left: auto; display: grid; justify-items: end; border-radius: 9px; font-size: 10px; font-weight: 600; color: var(--ink3); }
+.hero-z b { font-weight: 700; color: var(--ink2); font-variant-numeric: tabular-nums; }
+.hero-z i { font-style: normal; font-size: .85em; }
 .t-by { color: var(--ink3); text-transform: none; font-weight: 500; letter-spacing: 0; overflow: hidden; text-overflow: ellipsis; }
 .t-cell { padding: 0 14px; display: flex; flex-direction: column; gap: 3px; }
 .t-cell b > span { white-space: nowrap; }

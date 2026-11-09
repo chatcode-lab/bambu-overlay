@@ -82,7 +82,11 @@
         <i class="edge"></i>
       </div>
       <svg class="ph" data-ifnot="cover"><use href="#i-cube"/></svg>
-      <span class="hero-plate" data-if="plateTxt" data-t="plateTxt"></span>
+      <!-- plate badge left; heights right: layer height above, current Z / model height on the stats baseline -->
+      <div class="hero-tags">
+        <span class="hero-plate" data-if="plateTxt" data-t="plateTxt"></span>
+        <span class="hero-z" data-if="heightsOn"><span data-if="dTxt">STEP:<b data-t="dTxt"></b><i>mm</i></span><span data-if="hTxt">Z:<b data-t="zTxt"></b>/<b data-t="hTxt"></b><i>mm</i></span></span>
+      </div>
     </div>
     <div class="t-title">
       <div class="status"><i class="dot"></i><span data-t="statusTxt"></span><span class="t-by" data-if="designerStatus">· by <span data-t="designerStatus"></span></span><span class="viewers" data-if="viewersTxt"><svg class="ic"><use href="#i-eye"/></svg><span data-t="viewersTxt"></span></span></div>

@@ -142,6 +142,31 @@ class ViewTests(HubTestCase):
         f = self.hub.view()["job"]["filaments"]
         self.assertEqual([(x["slot"], x["side"], x["active"]) for x in f], [("A1", "L", False), ("A3", "R", True)])
 
+    def test_previous_jobs_layers_are_not_shown_while_a_new_job_prepares(self):
+        self.feed(gcode_state="PREPARE", mc_percent=0, layer_num=227, total_layer_num=227)   # stale, from the last job
+        j = self.hub.view()["job"]
+        self.assertEqual((j["layer"], j["totalLayers"]), (0, 0))   # job file not read yet: unknown
+        self.hub.set_media(self.hub.job_key, {"totalLayers": 465}, None)
+        j = self.hub.view()["job"]
+        self.assertEqual((j["layer"], j["totalLayers"]), (0, 465))
+        self.feed(gcode_state="RUNNING", mc_percent=1, layer_num=3, total_layer_num=465)   # the printer caught up
+        j = self.hub.view()["job"]
+        self.assertEqual((j["layer"], j["totalLayers"]), (3, 465))
+        self.feed(gcode_state="RUNNING", mc_percent=0, layer_num=227, total_layer_num=227)   # first seconds of printing
+        self.assertEqual(self.hub.view()["job"]["layer"], 0)
+        self.feed(gcode_state="RUNNING", mc_percent=40, layer_num=180, total_layer_num=464)   # off by one: printer wins
+        j = self.hub.view()["job"]
+        self.assertEqual((j["layer"], j["totalLayers"]), (180, 464))
+
+    def test_current_height_follows_the_printed_layer(self):
+        self.feed(gcode_state="RUNNING", mc_percent=50, layer_num=2, total_layer_num=3)
+        self.hub.set_media(self.hub.job_key, {"totalLayers": 3, "layerZ": [0.2, 0.4, 0.6], "modelHeight": 0.6,
+                                              "layerHeight": 0.2}, None)
+        j = self.hub.view()["job"]
+        self.assertEqual((j["z"], j["modelHeight"], j["layerHeight"]), (0.4, 0.6, 0.2))
+        self.feed(gcode_state="PREPARE", mc_percent=0, layer_num=0, total_layer_num=3)
+        self.assertIsNone(self.hub.view()["job"]["z"])   # nothing printed yet
+
     def test_job_filament_colour_follows_the_mapped_tray_not_the_sliced_file(self):
         self.feed(mapping=[65535, 65535, 65535, 65535, 3])  # sliced brown, printer feeds red A4
         self.hub.set_media(self.hub.job_key, server.parse_slice_info(SLICE_INFO, 1), None)
@@ -609,15 +634,27 @@ class ParsingTests(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         path = Path(tmp.name) / "job.gcode.3mf"
         with zipfile.ZipFile(path, "w") as z:
-            z.writestr(f"Metadata/plate_{plate}.gcode", "; gcode")
+            z.writestr(f"Metadata/plate_{plate}.gcode", "; HEADER_BLOCK_START\n; total layer number: 465\n; gcode")
             z.writestr(f"Metadata/plate_{plate}.png", f"png-{plate}")
             z.writestr("Metadata/slice_info.config", SLICE_INFO.replace(b'value="1"', f'value="{plate}"'.encode()))
         return path
 
     def test_parse_3mf_uses_the_job_plate(self):
         meta, cover = server.parse_3mf(self._3mf(3), 3)
-        self.assertEqual((meta["plate"], meta["weightG"], cover), (3, 73.5, b"png-3"))
+        self.assertEqual((meta["plate"], meta["weightG"], meta["totalLayers"], cover), (3, 73.5, 465, b"png-3"))
         self.assertEqual(server.parse_3mf(self._3mf(2), None)[0]["plate"], 2)  # plate unknown: the sliced one
+
+    def test_gcode_layers_reads_every_layer_height_across_chunks(self):
+        import io
+        filler = b"G1 X1 Y1 E0.1\n" * 30_000   # ~420 kB per layer: markers fall on and around the 1 MB chunk edges
+        body = b"".join(b"; CHANGE_LAYER\n; Z_HEIGHT: %s\n; LAYER_HEIGHT: 0.2\n" % z.encode() + filler
+                        for z in ("0.2", "0.4", "0.6", "0.8", "1", "1.4", "1.6"))
+        out = server.gcode_layers(io.BytesIO(b"; HEADER_BLOCK_START\n; total layer number: 7\n" + body))
+        self.assertEqual(out["layerZ"], [0.2, 0.4, 0.6, 0.8, 1.0, 1.4, 1.6])
+        self.assertEqual((out["totalLayers"], out["modelHeight"], out["layerHeight"]), (7, 1.6, 0.2))
+        # markers that don't match the layer count (e.g. a by-object print) aren't trusted for heights
+        out = server.gcode_layers(io.BytesIO(b"; total layer number: 9\n" + body))
+        self.assertEqual((out["totalLayers"], "layerZ" in out), (9, False))
 
     def test_parse_3mf_rejects_another_plates_file(self):
         # same project printed earlier with plate 1; the job now prints plate 3 -> not the job's file (yet)

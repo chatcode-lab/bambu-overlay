@@ -125,6 +125,7 @@
         title: 'Baby Stroller v1', designer: 'Conceptual3D', license: 'BY-NC', makerworld: 'makerworld.com/models/835950',
         maker: { handle: 'Conceptual3D', name: 'Conceptual3D', remix: false },
         plate: 1, plateCount: 4, progress, remainingMin: remaining, layer: Math.round(total * progress / 100), totalLayers: total,
+        z: Math.max(1, Math.round(total * progress / 100)) * 0.2, modelHeight: total * 0.2, layerHeight: 0.2,
         startedAt: now - 600 - progress * 143, finishedAt: state === 'FINISH' ? now - (ph - 0.93) * cycle : null, durationSec: state === 'FINISH' ? 14580 : null,
         predictionSec: 14370, weightG: 73.5, bedType: 'Textured PEI', objects: 4,
         speed: { level: 2, name: 'Standard', pct: 100 }, prepPercent: 100, printType: 'cloud', error: null,
@@ -196,6 +197,12 @@
     m.leftOrDash = m.left || (m.isDone ? 'Done' : '—');
     m.layerTxt = j.totalLayers ? `${j.layer}/${j.totalLayers}` : '—';
     m.plateTxt = j.hasJob && j.plateCount > 1 ? `Plate ${j.plate}/${j.plateCount}` : '';
+    // heights on the preview (from the job's sliced gcode): layer height, current Z / model height (0 before layer 1)
+    const mm = (v) => (v > 0 ? String(+v.toFixed(2)) : '');   // no trailing zeros; "mm" is in the markup
+    m.hTxt = j.hasJob ? mm(j.modelHeight) : '';
+    m.zTxt = m.hTxt ? mm(j.z) || '0' : '';
+    m.dTxt = j.hasJob ? mm(j.layerHeight) : '';
+    m.heightsOn = !!(m.hTxt || m.dTxt);
     m.speedTxt = j.speed?.name && j.active ? `${j.speed.name} ${j.speed.pct}%` : '';
     m.speedUpper = m.speedTxt.toUpperCase();
     m.weightTxt = j.hasJob && j.weightG ? `${j.weightG} g` : '';
@@ -548,6 +555,7 @@
   const HL_KEYS = new Set(['pct', 'layerTxt', 'statusTxt', 'statusUpper', 'label', 'stage', 'viewersTxt', 'speedTxt',
     'speedUpper', 'weightTxt']);
   const hl = { scope: null, base: new Map(), since: new Map() };
+  const hlFrom = new WeakMap();   // element -> the change time its running glow started from
   function hlChanged(key, val) {
     const was = hl.base.get(key);
     if (was === undefined) { hl.base.set(key, val); return false; }
@@ -571,12 +579,16 @@
       const key = el.dataset.k || (HL_KEYS.has(el.dataset.t) ? el.dataset.t : null);
       const t = key ? hl.since.get(key) : undefined;
       const on = t !== undefined && now - t < HL_MS;
-      if (on && !el.classList.contains('chg')) {   // (re)rendered elements continue the glow where it was
+      if (on && hlFrom.get(el) !== t) {
+        // a newer change restarts a glow still running; (re)rendered elements continue the glow where it was
+        if (el.classList.contains('chg')) { el.classList.remove('chg'); void el.offsetWidth; }
         el.style.animationDelay = `${t - now}ms`;
         el.classList.add('chg');
+        hlFrom.set(el, t);
       } else if (!on && el.classList.contains('chg')) {
         el.classList.remove('chg');
         el.style.animationDelay = '';
+        hlFrom.delete(el);
       }
     }
   }

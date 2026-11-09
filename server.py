@@ -592,6 +592,9 @@ def parse_3mf(path: Path, plate: int | None) -> tuple[dict, bytes | None]:
             for f in meta.get("filaments") or []:
                 if f.get("id") in ext:
                     f["extruder"] = ext[f["id"]]
+        if (real := names.get(f"metadata/plate_{plate}.gcode")):
+            with z.open(real) as g:
+                meta.update(gcode_layers(g))
         if (pj := read(f"Metadata/plate_{plate}.json")):
             try:
                 bed = json.loads(pj).get("bed_type") or ""
@@ -604,6 +607,31 @@ def parse_3mf(path: Path, plate: int | None) -> tuple[dict, bytes | None]:
                 if key in ("Title", "Designer", "License", "ProfileTitle"):
                     meta[key[0].lower() + key[1:]] = html.unescape(value).strip()
     return meta, cover
+
+
+Z_MARK = re.compile(rb"^; Z_HEIGHT: *([\d.]+)", re.M)
+
+
+def gcode_layers(fh) -> dict:
+    """Layers of the sliced gcode: its header's "; total layer number: N", and the print height of every layer
+    (Bambu Studio / Orca mark each layer change with "; Z_HEIGHT: z"), read in 1 MB chunks. The layer height is the
+    most common step between layers (a first layer or a few odd ones don't change it)."""
+    out: dict = {}
+    head = fh.read(1 << 20)
+    if (m := re.search(rb"total layer number:\s*(\d+)", head[:8192])):
+        out["totalLayers"] = int(m.group(1))
+    zs: list[float] = []
+    tail, chunk = b"", head
+    while chunk:
+        buf, chunk = tail + chunk, fh.read(1 << 20)
+        cut = len(buf) if not chunk else buf.rfind(b"\n") + 1   # whole lines only; the rest joins the next chunk
+        zs += [float(v) for v in Z_MARK.findall(buf[:cut])]
+        tail = buf[cut:]
+    if zs and len(zs) == out.get("totalLayers", len(zs)):
+        steps = [round(b - a, 2) for a, b in zip([0.0] + zs, zs)]
+        out.update(layerZ=[round(v, 3) for v in zs], modelHeight=round(max(zs), 2),
+                   layerHeight=max(set(steps), key=steps.count))
+    return out
 
 
 def filament_extruders(data: bytes) -> dict[int, int]:
@@ -769,7 +797,7 @@ class MediaWorker(threading.Thread):
         return True
 
 
-MEDIA_CACHE_V = 3        # bump to ignore cached job media written by older versions (v1: stale plate, v2: no nozzles)
+MEDIA_CACHE_V = 5        # bump to ignore cached job media from older versions (v1 stale plate, v2 nozzles, v3 layers, v4 heights)
 FRESH_FILE_SLACK = 120   # s: allowed difference between the printer's clock and ours
 FRESH_FILE_GRACE = 180   # s: after this, accept an older file (a re-print from the printer's history keeps it)
 RECHECK_FOR = 20 * 60    # s: how long after the start to keep looking for a newer copy of an older loaded file
@@ -1723,6 +1751,16 @@ def build_view(hub: "Hub") -> dict:
     task = str(p.get("subtask_name") or "")
     design_id = str(p.get("design_id") or "")
     plate = job_plate(p) or 1
+    # Until the first layer, the printer keeps reporting the previous job's layers (e.g. 227/227 while a new
+    # 465-layer job prepares): when its total doesn't match this job's sliced total, show 0 of the sliced total.
+    # Only while preparing / at 0%, so a printer that counts one layer differently never pins it at 0 mid-print.
+    layer, total_layers = _int(p.get("layer_num")), _int(p.get("total_layer_num"))
+    sliced_total = _int(meta.get("totalLayers"))
+    starting = state == "PREPARE" or (state == "RUNNING" and _int(p.get("mc_percent")) == 0)
+    if starting and total_layers != sliced_total:
+        layer, total_layers = 0, sliced_total   # 0 = unknown yet (job file not read): shown as "—"
+    zs = meta.get("layerZ") or []
+    z = zs[layer - 1] if 1 <= layer <= len(zs) else None   # print height of the current layer
     mw = hub.makers.get(design_id) if design_id.isdigit() else None
     maker = (mw or {}).get("maker") or ({"handle": "", "name": meta["designer"]} if meta.get("designer") else None)
     job_rec = hub.jobs.get(hub.job_key or "", {})
@@ -1743,7 +1781,8 @@ def build_view(hub: "Hub") -> dict:
         "plate": plate, "plateCount": _int(p.get("plate_cnt")) or None,
         "progress": max(0, min(100, _int(p.get("mc_percent")))),
         "remainingMin": max(0, _int(p.get("mc_remaining_time"))),
-        "layer": _int(p.get("layer_num")), "totalLayers": _int(p.get("total_layer_num")),
+        "layer": layer, "totalLayers": total_layers,
+        "z": z, "modelHeight": meta.get("modelHeight"), "layerHeight": meta.get("layerHeight"),
         "startedAt": started if state in JOB_STATES else None,
         "finishedAt": job_rec.get("end") if state in ("FINISH", "FAILED") else None,
         "durationSec": (job_rec["end"] - started) if state in ("FINISH", "FAILED") and job_rec.get("end")

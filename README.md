@@ -88,11 +88,15 @@ e.g. one scene with `/?layout=hud` and another with `/?layout=minimal`:
 The **lower third** puts a large model preview in the bottom-left corner, rising above the band, with the job name
 above the stats row. As layers print, the preview turns from a pale ghost into the solid model, with a glowing line at
 the current layer height. Layer count is used rather than time %, because it tracks physical height.
+At the bottom of the preview, level with the stats values, sit the plate badge (multi-plate projects) and, right-aligned,
+the heights from the job's sliced G-code on two lines: `STEP:0.2mm` (layer height) above `Z:64.2/93mm` (current print
+height / model height). While a new job prepares, the layer shows `0/N` of the new job rather than the previous job's last count.
 When a job uses several filaments (both nozzles, or several AMS colours), the filament cell lists them on two lines:
 the one printing now first and bright, with the nozzle each is sliced for (L/R) when both are used, and "+N" for more.
 Filaments the slicer lists but practically doesn't use (under 0.05 g) are left out.
 Values that change (viewer count, %, layer, status, temperatures, filament) glow amber for a few seconds so they get
-noticed; the elapsed / time-left clocks don't, and temperatures only on a new target or a move of 5° or more.
+noticed (a new change restarts the glow); the elapsed / time-left clocks don't, and temperatures only on a new target
+or a move of 5° or more.
 Your own socials appear every couple of minutes (adjustable, 20 s to 30 min) at the right end of the print name's
 line, on its baseline: "Follow" with the logos and your username rolls up into view, as if on the face of a turning
 cube, a glint runs over it three times, 3 s apart, and it rolls back down; then the next username. Twitch (your channel)
