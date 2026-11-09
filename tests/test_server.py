@@ -340,6 +340,8 @@ class TwitchTests(HubTestCase):
         self.assertFalse(any(self.hub.settings[k] for k in ("socialTiktok", "socialX", "socialInstagram")))
         s = self.hub.update_settings({"tiktokHandle": "borkasm", "instagramHandle": "bor.ka", "socialX": True})
         self.assertEqual((s["tiktokHandle"], s["instagramHandle"], s["socialX"]), ("borkasm", "bor.ka", True))
+        self.assertEqual(self.hub.update_settings({"youtubeHandle": "bor-kasm", "socialYoutube": True})["youtubeHandle"], "bor-kasm")
+        self.assertFalse(server.DEFAULT_SETTINGS["socialYoutube"])
         for bad in ("@borkasm", "x.com/karulin", "a b", "<b>"):
             with self.assertRaises(ValueError):
                 self.hub.update_settings({"xHandle": bad})

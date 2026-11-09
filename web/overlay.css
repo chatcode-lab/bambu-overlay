@@ -182,6 +182,7 @@ html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background:
 .t-line { display: flex; align-items: baseline; min-width: 0; }
 .t-line > .t-name { flex: 0 1 auto; min-width: 0; }
 .t-soc { flex: 1 0 auto; display: flex; justify-content: flex-end; align-items: baseline; padding-left: 24px;
+  perspective: 320px; perspective-origin: calc(100% - 70px) 50%;   /* viewed from about the middle of the group */
   font-size: 13px; white-space: nowrap;
   /* grey but legible over a bright, compressed camera image: a firm dark outline plus a soft shadow */
   --soc-ink: rgba(245, 247, 251, .72);
@@ -196,23 +197,22 @@ html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background:
 .soc .ic { font-size: 14px; fill: currentColor; stroke: none; filter: var(--soc-ic-filter); }
 .soc .ic.line { fill: none; stroke: currentColor; stroke-width: 2.1; }
 .soc b { font-weight: 500; letter-spacing: .01em; }
-.soc .ch { display: inline-block; }
-/* in: rolls up into view (with a little overshoot); a glint then runs over the logos and letters three times, a pause
-   between passes (each 1.6 s cycle: the glint in its first half, rest in the second); out: rolls back down */
+/* in: rolls up into view (with a little overshoot); a glint then runs over the logos and letters three times, 3 s
+   apart (each 3.8 s cycle: a 0.8 s glint, then rest); out: rolls back down */
 .soc.in { animation: soc-flip-in .75s cubic-bezier(.25, .9, .3, 1.25) both; }
-.soc.in .ic { animation: soc-icon-glint 1.6s ease-in-out 3 both; animation-delay: calc(var(--i) * 70ms + 1100ms); }
-.soc.in .ch { animation: soc-glint 1.6s ease-in-out 3 both; animation-delay: calc(var(--i) * 45ms + 1250ms); }
+.soc.in .ic { animation: soc-icon-glint 3.8s ease-in-out 3 both; animation-delay: calc(var(--i) * 70ms + 1100ms); }
+.soc.in .ch { animation: soc-glint 3.8s ease-in-out 3 both; animation-delay: calc(var(--i) * 45ms + 1250ms); }
 .soc.out { animation: soc-flip-out .55s cubic-bezier(.5, 0, .75, .4) forwards; }
-@keyframes soc-flip-in { from { opacity: 0; transform: perspective(320px) rotateX(-90deg); } 35% { opacity: 1; }
-  to { opacity: 1; transform: perspective(320px) rotateX(0deg); } }
-@keyframes soc-flip-out { from { opacity: 1; transform: perspective(320px) rotateX(0deg); } 65% { opacity: 1; }
-  to { opacity: 0; transform: perspective(320px) rotateX(-90deg); } }
+/* ends at transform: none, so the resting line is plain 2D text at 1:1 (a lingering 3D layer made the glyphs jitter
+   when the glint repainted them) */
+@keyframes soc-flip-in { from { opacity: 0; transform: rotateX(-90deg); } 35% { opacity: 1; } to { opacity: 1; transform: none; } }
+@keyframes soc-flip-out { from { opacity: 1; transform: none; } 65% { opacity: 1; } to { opacity: 0; transform: rotateX(-90deg); } }
 @keyframes soc-glint {
-  0%, 50%, 100% { color: var(--soc-ink); text-shadow: var(--soc-shadow), 0 0 0 transparent, 0 0 0 transparent; }
-  22% { color: #fff; text-shadow: var(--soc-shadow), 0 0 8px rgba(255,255,255,.85), 0 0 16px var(--accent); } }
+  0%, 21%, 100% { color: var(--soc-ink); text-shadow: var(--soc-shadow), 0 0 0 transparent, 0 0 0 transparent; }
+  10.5% { color: #fff; text-shadow: var(--soc-shadow), 0 0 8px rgba(255,255,255,.85), 0 0 16px var(--accent); } }
 @keyframes soc-icon-glint {
-  0%, 50%, 100% { color: var(--soc-ink); filter: var(--soc-ic-filter); }
-  22% { color: #fff; filter: drop-shadow(0 0 .7px #000) drop-shadow(0 0 1.5px #000) drop-shadow(0 0 6px rgba(255,255,255,.9)); } }
+  0%, 21%, 100% { color: var(--soc-ink); filter: var(--soc-ic-filter); }
+  10.5% { color: #fff; filter: drop-shadow(0 0 .7px #000) drop-shadow(0 0 1.5px #000) drop-shadow(0 0 6px rgba(255,255,255,.9)); } }
 .t-row { bottom: 18px; height: 62px; display: flex; align-items: center; gap: 0; text-shadow: var(--shadow-txt); }
 .t-row > * { flex: none; }
 .t-row > * + * { border-left: 1px solid rgba(255,255,255,.16); }

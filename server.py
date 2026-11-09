@@ -86,7 +86,9 @@ DEFAULT_SETTINGS = {
     "socialTiktok": False,
     "socialX": False,
     "socialInstagram": False,
+    "socialYoutube": False,
     "tiktokHandle": "",
+    "youtubeHandle": "",       # the channel's @handle, without "@"
     "xHandle": "",
     "instagramHandle": "",
     "socialEvery": 120,        # seconds between rounds of socials flipping in next to the print name
@@ -118,9 +120,11 @@ _SETTING_RULES = {
     "socialTiktok": lambda v: isinstance(v, bool),
     "socialX": lambda v: isinstance(v, bool),
     "socialInstagram": lambda v: isinstance(v, bool),
+    "socialYoutube": lambda v: isinstance(v, bool),
     "tiktokHandle": lambda v: _handle(v),
     "xHandle": lambda v: _handle(v),
     "instagramHandle": lambda v: _handle(v),
+    "youtubeHandle": lambda v: _handle(v),
     "socialEvery": lambda v: isinstance(v, int) and not isinstance(v, bool) and 20 <= v <= 1800,
     "obsCrop": lambda v: isinstance(v, bool),
     "cropMode": lambda v: v in ("auto", "printing", "idle"),
@@ -130,8 +134,8 @@ _SETTING_RULES = {
 }
 
 
-def _handle(v) -> bool:
-    return isinstance(v, str) and bool(re.fullmatch(r"[A-Za-z0-9._]{0,30}", v))
+def _handle(v) -> bool:   # TikTok / X / Instagram / YouTube usernames (YouTube handles may contain "-")
+    return isinstance(v, str) and bool(re.fullmatch(r"[A-Za-z0-9._-]{0,30}", v))
 
 
 def _crop_pair(v) -> bool:

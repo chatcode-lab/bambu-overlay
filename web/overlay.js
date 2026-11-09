@@ -5,7 +5,8 @@
   const stage = document.getElementById('stage');
   const DEFAULTS = { layout: 'glass', accent: 'auto', position: 'auto', side: 'left', scale: 1, idle: 'show',
     name: 'file', ams: true, credit: false, byline: false, build: true, meter: true, viewers: true, demo: false,
-    socialTwitch: true, socialTiktok: false, socialX: false, socialInstagram: false, tiktokHandle: '', xHandle: '', instagramHandle: '',
+    socialTwitch: true, socialTiktok: false, socialX: false, socialInstagram: false, socialYoutube: false,
+    tiktokHandle: '', xHandle: '', instagramHandle: '', youtubeHandle: '',
     socialEvery: 120 };
   const DEFAULT_POS = { glass: 'bl', orb: 'tl', minimal: 'br' };
   const FALLBACK_ACCENT = '#4fe3c1';
@@ -212,7 +213,7 @@
 
   // The streamer's socials, in this order; platforms that share a handle are shown once with all their icons.
   const SOCIALS = [['tiktok', 'socialTiktok', 'tiktokHandle'], ['twitch', 'socialTwitch', null],
-    ['x', 'socialX', 'xHandle'], ['instagram', 'socialInstagram', 'instagramHandle']];
+    ['youtube', 'socialYoutube', 'youtubeHandle'], ['x', 'socialX', 'xHandle'], ['instagram', 'socialInstagram', 'instagramHandle']];
   function socialGroups(d, s) {
     const groups = [];
     for (const [net, on, key] of SOCIALS) {
@@ -491,7 +492,7 @@
   // ------------------------------------------------------------------ socials: flip in next to the print name
   // Every `socialEvery` seconds each social group flips in (at the right end of the name line), a glint runs
   // over it, and it flips back out; then the next group. Only these few seconds animate; the rest of the time it's idle.
-  const SOC_FIRST_MS = 8000, SOC_SOON_MS = 1500, SOC_SHOW_MS = 6500, SOC_SWAP_MS = 600;
+  const SOC_FIRST_MS = 8000, SOC_SOON_MS = 1500, SOC_SHOW_MS = 10600, SOC_SWAP_MS = 600;   // show: roll in + 3 glints
   const soc = { key: null, groups: [], every: 120, timer: 0 };
   function socHtml(g) {
     const icons = g.nets.map((n, i) => `<svg class="ic${n === 'instagram' ? ' line' : ''}" style="--i:${i}"><use href="#i-${n}"/></svg>`).join('');

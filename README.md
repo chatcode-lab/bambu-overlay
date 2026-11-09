@@ -77,8 +77,8 @@ e.g. one scene with `/?layout=hud` and another with `/?layout=minimal`:
 | `byline` | `0` / `1`: "by maker" after the print name | `0` |
 | `credit` | `0` / `1`: designer + MakerWorld link | `0` |
 | `viewers` | `0` / `1`: live Twitch viewer count (once set up, see below) | `1` |
-| `socialTwitch` `socialTiktok` `socialX` `socialInstagram` | `0` / `1`: your socials, flipping in next to the print name | Twitch only |
-| `tiktokHandle` `xHandle` `instagramHandle` | usernames without `@` (Twitch uses the channel name) | empty |
+| `socialTwitch` `socialTiktok` `socialYoutube` `socialX` `socialInstagram` | `0` / `1`: your socials, flipping in next to the print name | Twitch only |
+| `tiktokHandle` `youtubeHandle` `xHandle` `instagramHandle` | usernames without `@` (Twitch uses the channel name) | empty |
 | `socialEvery` | seconds between rounds of socials (20–1800) | `120` |
 | `meter` | `0` / `1`: Winamp-style L/R audio meter (needs the OBS WebSocket server) | `1` |
 | `build` | `0` / `1`: the big lower-third model preview fills up layer by layer (unprinted part as a ghost) | `1` |
@@ -90,10 +90,11 @@ the current layer height. Layer count is used rather than time %, because it tra
 When a job uses several filaments (both nozzles, or several AMS colours), the filament cell lists them on two lines:
 the one printing now first and bright, with the nozzle each is sliced for (L/R) when both are used, and "+N" for more.
 Filaments the slicer lists but practically doesn't use (under 0.05 g) are left out.
-Your own socials flip in every couple of minutes (adjustable, 20 s to 30 min) at the right end of the print name's
-line, on its baseline: "Follow" with the logos and your username rotates in around the
-horizontal axis, a glint runs over it, and it rotates back out; then the next username. Twitch (your channel) is on by default; TikTok, X and Instagram are
-switchable in the control panel. Platforms that share a username are shown once with all their logos.
+Your own socials appear every couple of minutes (adjustable, 20 s to 30 min) at the right end of the print name's
+line, on its baseline: "Follow" with the logos and your username rolls up into view, as if on the face of a turning
+cube, a glint runs over it three times, 3 s apart, and it rolls back down; then the next username. Twitch (your channel)
+is on by default; TikTok, YouTube, X and Instagram are switchable in the control panel. Platforms that share a
+username are shown once with all their logos.
 
 The **audio meter** is two segmented L/R bars in an old-Winamp style: LED segments going green→yellow→red,
 peak caps that hold then fall, pixel-font labels. It sits at the bottom-right end of the lower third, in the glass
