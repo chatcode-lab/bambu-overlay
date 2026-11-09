@@ -61,7 +61,9 @@ class HubTestCase(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         tmp = Path(self.tmp.name)
         self.patches = [mock.patch.object(server, "SETTINGS_FILE", tmp / "settings.json"),
-                        mock.patch.object(server, "JOBS_FILE", tmp / "jobs.json")]
+                        mock.patch.object(server, "JOBS_FILE", tmp / "jobs.json"),
+                        mock.patch.object(server, "MAKERS_FILE", tmp / "makerworld.json"),
+                        mock.patch.object(server, "TWITCH_FILE", tmp / "twitch.json")]
         for p in self.patches:
             p.start()
         cfg = SimpleNamespace(ip="192.168.1.92", access_code="x", serial="20P0TESTSERIAL1",
@@ -167,6 +169,159 @@ class JobStartTests(HubTestCase):
         want = self.hub.wanted_media()
         self.assertEqual((want["src"], want["state"]), ("observed", "PREPARE"))
         self.assertEqual(server.recheck_delay({"fileTime": want["start"] - 12 * 3600}, want, want["start"] + 1), 15)
+
+
+def mw_design(i, handle, originals=()):
+    return {"id": i, "designCreator": {"uid": i * 10, "name": handle.title(), "handle": handle}, "originals": list(originals)}
+
+
+def mw_original(i, handle):
+    return {"link": f"https://makerworld.com/models/{i}", "author": handle.title(), "designId": i,
+            "homepage": f"https://makerworld.com/@{handle}",
+            "insideOriginalInfo": {"designId": i, "designCreator": {"name": handle.title(), "handle": handle}}}
+
+
+class MakerCreditTests(HubTestCase):
+    def test_original_design_credits_its_creator(self):
+        info = server.resolve_maker(1, {1: mw_design(1, "kevtoeg")}.__getitem__)
+        self.assertEqual((info["maker"]["handle"], info["remix"]), ("kevtoeg", False))
+
+    def test_remix_of_a_remix_credits_the_first_maker(self):
+        designs = {3: mw_design(3, "remixer2", [mw_original(2, "remixer1")]),
+                   2: mw_design(2, "remixer1", [mw_original(1, "creator")]),
+                   1: mw_design(1, "creator")}
+        info = server.resolve_maker(3, designs.__getitem__)
+        self.assertEqual((info["maker"]["handle"], info["uploader"]["handle"], info["remix"]), ("creator", "remixer2", True))
+
+    def test_lookup_failure_mid_chain_keeps_the_credit_found_so_far(self):
+        def fetch(i):
+            if i == 2:
+                raise OSError("timeout")
+            return mw_design(3, "remixer", [mw_original(2, "creator")])
+        self.assertEqual(server.resolve_maker(3, fetch)["maker"]["handle"], "creator")
+
+    def test_original_hosted_elsewhere(self):
+        named = mw_design(5, "porter", [{"author": "Jane Doe", "designId": 0, "homepage": "", "insideOriginalInfo": None}])
+        url_only = mw_design(6, "porter", [{"author": "https://sketchfab.com/3d-models/x", "designId": 0, "homepage": ""}])
+        self.assertEqual(server.resolve_maker(5, lambda i: named)["maker"], {"handle": "", "name": "Jane Doe"})
+        self.assertEqual(server.resolve_maker(6, lambda i: url_only)["maker"]["handle"], "porter")  # no better name
+
+    def test_view_shows_the_original_maker_else_the_3mf_designer(self):
+        self.feed(design_id="835950")
+        self.hub.set_media(self.hub.job_key, {"designer": "Uploader Name"}, None)
+        self.assertEqual(self.hub.view()["job"]["maker"], {"handle": "", "name": "Uploader Name", "remix": False})
+        self.hub.set_maker("835950", {"maker": {"handle": "creator", "name": "Creator"}, "remix": True})
+        self.assertEqual(self.hub.view()["job"]["maker"], {"handle": "creator", "name": "Creator", "remix": True})
+        self.assertIn("835950", server.load_json(server.MAKERS_FILE, {}))
+
+
+class FakeTwitch:
+    """Stands in for http_json: token endpoint + Get Streams."""
+    def __init__(self, viewers=None, token_error=None):
+        self.viewers, self.token_error, self.calls, self.expired = viewers, token_error, [], set()
+
+    def __call__(self, url, data=None, headers=None, timeout=10):
+        self.calls.append((url, data, headers))
+        if url == server.TWITCH_TOKEN:
+            if self.token_error:
+                raise server.urllib.error.HTTPError(url, self.token_error, "x", {}, None)
+            return {"access_token": f"tok{len(self.calls)}", "expires_in": 5000000, "token_type": "bearer"}
+        token = headers["Authorization"].split()[-1]
+        if token in self.expired:
+            raise server.urllib.error.HTTPError(url, 401, "x", {}, None)
+        return {"data": [{"type": "live", "viewer_count": self.viewers}] if self.viewers is not None else []}
+
+
+class TwitchTests(HubTestCase):
+    ID, SECRET = "a" * 30, "b" * 30
+
+    def setup_twitch(self):
+        self.hub.update_settings({"twitchChannel": "MyChannel"})
+        self.hub.set_twitch_creds(self.ID, self.SECRET)
+
+    def test_not_set_up_sleeps_until_woken(self):
+        self.assertEqual(server.TwitchViewers(self.hub, FakeTwitch()).poll(), 3600)
+        self.assertEqual(self.hub.view()["twitch"]["status"], "not set up")
+
+    def test_live_viewer_count(self):
+        self.setup_twitch()
+        http = FakeTwitch(viewers=42)
+        self.assertEqual(server.TwitchViewers(self.hub, http).poll(), server.TWITCH_POLL)
+        t = self.hub.view()["twitch"]
+        self.assertEqual((t["status"], t["live"], t["viewers"]), ("live", True, 42))
+        self.assertTrue(http.calls[1][0].endswith("user_login=mychannel"))
+        self.assertEqual(http.calls[1][2]["Client-Id"], self.ID)
+
+    def test_offline_channel(self):
+        self.setup_twitch()
+        server.TwitchViewers(self.hub, FakeTwitch(viewers=None)).poll()
+        t = self.hub.view()["twitch"]
+        self.assertEqual((t["status"], t["live"], t["viewers"]), ("offline", False, None))
+
+    def test_expired_token_is_replaced_once(self):
+        self.setup_twitch()
+        http = FakeTwitch(viewers=7)
+        tw = server.TwitchViewers(self.hub, http)
+        tw.poll()
+        http.expired.add(tw.token[1])
+        tw.poll()
+        self.assertEqual([c[0] == server.TWITCH_TOKEN for c in http.calls], [True, False, False, True, False])
+        self.assertEqual(self.hub.view()["twitch"]["viewers"], 7)
+
+    def test_rejected_credentials(self):
+        self.setup_twitch()
+        server.TwitchViewers(self.hub, FakeTwitch(token_error=403)).poll()
+        self.assertIn("refused", self.hub.view()["twitch"]["status"])
+
+    def test_secret_is_stored_owner_only_and_never_in_the_view(self):
+        self.setup_twitch()
+        self.assertEqual(server.TWITCH_FILE.stat().st_mode & 0o777, 0o600)
+        self.assertEqual(server.load_twitch_creds(), {"clientId": self.ID, "clientSecret": self.SECRET})
+        state = json.dumps(self.hub.view())
+        self.assertNotIn(self.SECRET, state)
+        self.assertNotIn(self.ID, state)
+        self.assertTrue(self.hub.view()["twitch"]["hasSecret"])
+
+    def test_keeping_and_replacing_credentials(self):
+        self.setup_twitch()
+        self.hub.set_twitch_creds(None, None)   # Save with both fields empty: keep
+        self.assertTrue(self.hub.twitch_public()["hasSecret"])
+        self.hub.set_twitch_creds("c" * 30, None)   # another app: the old secret no longer applies
+        self.assertEqual(self.hub.twitch_public(), {"hasClientId": True, "hasSecret": False, "clientIdTail": "cccc",
+                                                    "source": "panel", "envChannel": ""})
+        with self.assertRaises(ValueError):
+            self.hub.set_twitch_creds("not valid!", None)
+        self.hub.set_twitch_creds(None, None, clear=True)
+        self.assertFalse(server.TWITCH_FILE.exists())
+
+    def test_env_credentials_win_and_cannot_be_changed_from_the_panel(self):
+        cfg = SimpleNamespace(**{**vars(self.hub.cfg), "twitch_client_id": self.ID, "twitch_client_secret": self.SECRET,
+                                 "twitch_channel": "envchan"})
+        server.save_twitch_creds({"clientId": "c" * 30, "clientSecret": "d" * 30})   # older panel entry
+        hub = server.Hub(cfg)
+        self.assertEqual(hub.twitch_creds, {"clientId": self.ID, "clientSecret": self.SECRET})
+        self.assertEqual((hub.twitch_public()["source"], hub.twitch_public()["envChannel"]), ("env", "envchan"))
+        with self.assertRaises(ValueError):
+            hub.set_twitch_creds("e" * 30, None)
+        http = FakeTwitch(viewers=3)
+        server.TwitchViewers(hub, http).poll()   # no channel setting: the .env channel is used
+        self.assertTrue(http.calls[1][0].endswith("user_login=envchan"))
+        self.assertNotIn(self.SECRET, json.dumps(hub.view()))
+
+    def test_malformed_env_values_are_reported_without_echoing_them(self):
+        cfg = SimpleNamespace(**{**vars(self.hub.cfg), "twitch_client_id": '"' + self.ID + '"',
+                                 "twitch_client_secret": self.SECRET, "twitch_channel": "envchan"})
+        hub = server.Hub(cfg)
+        http = FakeTwitch(viewers=3)
+        server.TwitchViewers(hub, http).poll()
+        status = hub.view()["twitch"]["status"]
+        self.assertIn("doesn't look like", status)
+        self.assertNotIn(self.ID, status)
+        self.assertEqual(http.calls, [])
+
+    def test_channel_setting_is_validated(self):
+        with self.assertRaises(ValueError):
+            self.hub.update_settings({"twitchChannel": "twitch.tv/me"})
 
 
 class CropTargetTests(HubTestCase):

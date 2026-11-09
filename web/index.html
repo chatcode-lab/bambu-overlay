@@ -25,6 +25,7 @@
     <symbol id="i-speed" viewBox="0 0 24 24"><path d="M4 16a8 8 0 1 1 16 0"/><path d="m12 16 4-5.5"/></symbol>
     <symbol id="i-note" viewBox="0 0 24 24"><path d="M9 18V5l11-2v13"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/></symbol>
     <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/></symbol>
   </defs>
 </svg>
 
@@ -37,8 +38,8 @@
     <div class="g-head">
       <div class="cover g-cover"><img data-src="cover" alt=""><svg class="ph" data-ifnot="cover"><use href="#i-cube"/></svg></div>
       <div class="g-info">
-        <div class="status"><i class="dot"></i><span data-t="label"></span><span class="g-stage" data-if="stage" data-t="stage"></span></div>
-        <div class="g-name" data-t="name"></div>
+        <div class="status"><i class="dot"></i><span data-t="label"></span><span class="g-stage" data-if="stage" data-t="stage"></span><span class="viewers" data-if="viewersTxt"><svg class="ic"><use href="#i-eye"/></svg><span data-t="viewersTxt"></span></span></div>
+        <div class="g-name"><span data-t="name"></span><span class="by" data-if="byline" data-t="byline"></span></div>
         <div class="credit" data-if="creditLine">
           <span data-if="designer"><svg class="ic"><use href="#i-user"/></svg><span data-t="designer"></span></span>
           <span data-if="mw"><svg class="ic"><use href="#i-link"/></svg><span data-t="mw"></span></span>
@@ -78,8 +79,8 @@
       <span class="hero-plate" data-if="plateTxt" data-t="plateTxt"></span>
     </div>
     <div class="t-title">
-      <div class="t-name" data-t="name"></div>
-      <div class="status"><i class="dot"></i><span data-t="statusTxt"></span><span class="t-by" data-if="designer">· by <span data-t="designer"></span></span></div>
+      <div class="status"><i class="dot"></i><span data-t="statusTxt"></span><span class="t-by" data-if="designerStatus">· by <span data-t="designerStatus"></span></span><span class="viewers" data-if="viewersTxt"><svg class="ic"><use href="#i-eye"/></svg><span data-t="viewersTxt"></span></span></div>
+      <div class="t-name"><span data-t="name"></span><span class="by" data-if="byline" data-t="byline"></span></div>
     </div>
     <div class="t-row">
       <div class="t-cell t-pct num" data-if="showProgress"><b data-t="pct"></b><small>%</small></div>
@@ -101,12 +102,13 @@
 
     <div class="hud-panel hud-job">
       <div class="hud-kicker"><i class="dot"></i>BAMBU LAB X2D <span class="dim">// LIVE<span data-if="elClock"> · T+<span class="num" data-t="elClock"></span></span></span></div>
-      <div class="hud-name" data-t="name"></div>
+      <div class="hud-name"><span data-t="name"></span><span class="by" data-if="byline" data-t="byline"></span></div>
       <dl class="hud-kv">
         <dt>STATUS</dt><dd data-t="statusUpper"></dd>
         <dt data-if="showProgress">LAYER</dt><dd data-if="showProgress" class="num" data-t="layerTxt"></dd>
         <dt data-if="speedTxt">SPEED</dt><dd data-if="speedTxt" data-t="speedUpper"></dd>
         <dt data-if="designer">DESIGN</dt><dd data-if="designer" data-t="designerUpper"></dd>
+        <dt data-if="viewersTxt">VIEWERS</dt><dd data-if="viewersTxt" class="num" data-t="viewersTxt"></dd>
       </dl>
       <div class="hud-seg" data-if="showProgress" data-list="segments"></div>
     </div>
@@ -141,9 +143,9 @@
 <!-- ============================================================ SIDEBAR: dashboard column -->
 <template id="tpl-sidebar">
   <section class="w sidebar" data-side>
-    <div class="status s-status"><i class="dot"></i><span data-t="label"></span><span class="s-stage" data-if="stage" data-t="stage"></span></div>
+    <div class="status s-status"><i class="dot"></i><span data-t="label"></span><span class="s-stage" data-if="stage" data-t="stage"></span><span class="viewers" data-if="viewersTxt"><svg class="ic"><use href="#i-eye"/></svg><span data-t="viewersTxt"></span></span></div>
     <div class="cover s-cover"><img data-src="cover" alt=""><svg class="ph" data-ifnot="cover"><use href="#i-cube"/></svg><span class="s-plate" data-if="plateTxt" data-t="plateTxt"></span></div>
-    <div class="s-name" data-t="name"></div>
+    <div class="s-name"><span data-t="name"></span><span class="by" data-if="byline" data-t="byline"></span></div>
     <div class="credit" data-if="creditLine">
       <span data-if="designer"><svg class="ic"><use href="#i-user"/></svg><span data-t="designer"></span></span>
       <span data-if="mw"><svg class="ic"><use href="#i-link"/></svg><span data-t="mw"></span></span>
@@ -177,8 +179,8 @@
       <div class="o-pct num" data-if="showProgress"><span data-t="pct"></span><small>%</small></div>
     </div>
     <div class="o-info">
-      <div class="status"><i class="dot"></i><span data-t="statusTxt"></span></div>
-      <div class="o-name" data-t="name"></div>
+      <div class="status"><i class="dot"></i><span data-t="statusTxt"></span><span class="viewers" data-if="viewersTxt"><svg class="ic"><use href="#i-eye"/></svg><span data-t="viewersTxt"></span></span></div>
+      <div class="o-name"><span data-t="name"></span><span class="by" data-if="byline" data-t="byline"></span></div>
       <div class="o-line" data-if="left"><svg class="ic"><use href="#i-clock"/></svg><b class="num" data-t="left"></b><span>left</span><span class="o-sep" data-if="el"></span><b class="num" data-t="el"></b><span data-if="el">elapsed</span></div>
       <div class="o-line" data-if="isDone"><svg class="ic"><use href="#i-check"/></svg><span data-t="doneTxt"></span></div>
       <div class="o-line dim" data-if="showProgress"><svg class="ic"><use href="#i-layers"/></svg><span>Layer</span><b class="num" data-t="layerTxt"></b></div>
@@ -197,6 +199,7 @@
       <span class="m-item" data-if="left"><b class="num" data-t="left"></b> left</span>
       <span class="m-item" data-if="el"><b class="num" data-t="el"></b> <span data-t="elLower"></span></span>
       <span class="m-item" data-if="isDone">Complete</span>
+      <span class="m-item viewers" data-if="viewersTxt"><svg class="ic"><use href="#i-eye"/></svg><b class="num" data-t="viewersTxt"></b></span>
       <span class="vu m-vu" data-if="meterOn" data-vu="h" data-segs="12"></span>
     </div>
   </section>

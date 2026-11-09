@@ -4,7 +4,7 @@
 
   const stage = document.getElementById('stage');
   const DEFAULTS = { layout: 'glass', accent: 'auto', position: 'auto', side: 'left', scale: 1, idle: 'show',
-    name: 'file', ams: true, credit: false, build: true, meter: true, demo: false };
+    name: 'file', ams: true, credit: false, byline: false, build: true, meter: true, viewers: true, demo: false };
   const DEFAULT_POS = { glass: 'bl', orb: 'tl', minimal: 'br' };
   const FALLBACK_ACCENT = '#4fe3c1';
 
@@ -55,6 +55,7 @@
   const pad = (n) => String(n).padStart(2, '0');
   const fmtClockDur = (sec) => `${pad(Math.floor(sec / 3600))}:${pad(Math.floor(sec % 3600 / 60))}`;
   const fmtClockDurSec = (sec) => `${fmtClockDur(sec)}:${pad(Math.floor(sec % 60))}`;
+  const fmtCount = (n) => (n < 1000 ? String(n) : n < 10000 ? `${(n / 1000).toFixed(1).replace(/\.0$/, '')}K` : `${Math.round(n / 1000)}K`);
   // No wall-clock times anywhere: viewers are in other time zones, durations read the same for everyone.
 
   function hexToHsl(hex) {
@@ -111,12 +112,14 @@
       ({ slot, type, name, color, alpha: 1, colors: [], remain, empty: false, active });
     return {
       v: 0, now, online: true, hasData: true, settings: real?.settings || {},
+      twitch: real?.twitch || null,   // real viewer numbers only: demo mode can be on stream
       printer: { ip: 'demo', serialTail: '', wifi: '-52dBm', status: 'demo', media: 'demo' },
       job: {
         state, label: { PREPARE: 'Preparing', RUNNING: 'Printing', FINISH: 'Print complete' }[state], stage,
         step: step != null ? step + 1 : null, steps: step != null ? prepSteps.length : null,
         hasJob: true, active: state !== 'FINISH', task: 'Double_Stroller(2)_1', fileName: 'Double Stroller(2) 1',
         title: 'Baby Stroller v1', designer: 'Conceptual3D', license: 'BY-NC', makerworld: 'makerworld.com/models/835950',
+        maker: { handle: 'Conceptual3D', name: 'Conceptual3D', remix: false },
         plate: 1, plateCount: 4, progress, remainingMin: remaining, layer: Math.round(total * progress / 100), totalLayers: total,
         startedAt: now - 600 - progress * 143, finishedAt: state === 'FINISH' ? now - (ph - 0.93) * cycle : null, durationSec: state === 'FINISH' ? 14580 : null,
         predictionSec: 14370, weightG: 73.5, bedType: 'Textured PEI', objects: 4,
@@ -158,8 +161,14 @@
     m.statusTxt = stage ? `${m.label} · ${stage}` : m.label;
     m.statusUpper = m.statusTxt.toUpperCase();
     m.name = j.hasJob ? ((s.name === 'title' && j.title) || j.fileName || 'Untitled') : 'Bambu Lab X2D';
-    m.designer = s.credit && j.hasJob ? (j.designer || '') : '';
+    const mk = j.hasJob ? j.maker : null;   // the original maker when the model is a remix
+    m.maker = mk ? (mk.handle ? `@${mk.handle}` : (mk.name || '')) : '';
+    m.byline = s.byline && m.maker ? `by ${m.maker}` : '';
+    m.designer = s.credit && j.hasJob ? (m.maker || j.designer || '') : '';
+    m.designerStatus = m.byline ? '' : m.designer;   // lower third: no second "by" when the byline shows it
     m.designerUpper = m.designer.toUpperCase();
+    const tw = d.twitch;
+    m.viewersTxt = s.viewers !== false && tw?.live && tw.viewers != null ? fmtCount(tw.viewers) : '';
     m.mw = s.credit && j.hasJob ? (j.makerworld || '') : '';
     m.creditLine = m.designer || m.mw;
     m.pct = j.progress;

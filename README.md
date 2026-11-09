@@ -2,14 +2,14 @@
 
 A locally hosted, transparent HTML overlay for streaming Bambu Lab X2D prints with OBS. It shows live job
 progress, time left, elapsed time, layers, both nozzle temperatures, bed and chamber temperatures, the plate
-preview rendered by the slicer, the filament in use and AMS slots (optionally also the model title, designer and
-MakerWorld link). Six switchable layouts are included, and the accent colour follows the filament being printed.
-It can also pan the camera crop in OBS smoothly when a print starts or ends, and draw a Winamp-style two-channel
-audio meter from OBS's own levels.
+preview rendered by the slicer, the filament in use and AMS slots (optionally also the model title, a
+"by @maker" credit and the MakerWorld link). Six switchable layouts are included, and the accent colour follows the
+filament being printed. It can also pan the camera crop in OBS smoothly when a print starts or ends, draw a
+Winamp-style two-channel audio meter from OBS's own levels, and show your live Twitch viewer count.
 
 No wall-clock times (ETA, clock) are shown on purpose: viewers are in other time zones, durations aren't.
 
-![A frame of the live stream: the lower-third layout with the model preview, progress, temperatures, filament and audio meter over the printer camera](docs/stream.jpg)
+![A frame of the live stream: the lower-third layout with the model preview, viewer count, the print name with its maker, progress, temperatures, filament and audio meter over the printer camera](docs/stream.jpg)
 
 | Glass | Lower third | HUD |
 |---|---|---|
@@ -74,7 +74,9 @@ e.g. one scene with `/?layout=hud` and another with `/?layout=minimal`:
 | `idle` | `show` / `hide` when nothing is printing | `show` |
 | `name` | `file` (printer task / file name) / `title` (model title from the 3mf) | `file` |
 | `ams` | `0` / `1`: AMS / filament slots | `1` |
+| `byline` | `0` / `1`: "by @maker" after the print name | `0` |
 | `credit` | `0` / `1`: designer + MakerWorld link | `0` |
+| `viewers` | `0` / `1`: live Twitch viewer count (once set up, see below) | `1` |
 | `meter` | `0` / `1`: Winamp-style L/R audio meter (needs the OBS WebSocket server) | `1` |
 | `build` | `0` / `1`: the big lower-third model preview fills up layer by layer (unprinted part as a ghost) | `1` |
 | `demo` | `1` simulate a print, `auto` simulate only when idle/offline | off |
@@ -90,6 +92,13 @@ password never reaches the browser) and shows the loudest **unmuted** input. Mut
 followed live, so a muted backup source is ignored until you unmute it. A specific input can be picked in the
 control panel. It's a beat visualiser, not a studio meter: bars are centred on the running average loudness and
 scaled by its recent variation, so loud masters and quiet tracks both move.
+
+**Maker credit.** The printer reports the MakerWorld design id of the job. The server looks the design up once on
+MakerWorld's public design API and caches the answer in `cache/makerworld.json`. For a remix it follows the design's
+*originals* back to the first one, so the credit goes to the maker of the original model, not the remixer. An
+original hosted elsewhere is credited by the author name MakerWorld lists for it; when there's only a link, the
+remixer keeps the credit. Prints without a MakerWorld design fall back to the designer name in the job file. This API
+is undocumented, so if MakerWorld changes it the credit falls back the same way.
 
 The overlay hides itself if the printer has been unreachable for 90 s or the server stops. Paused jobs turn
 amber and stopped/failed jobs turn red. Finished jobs show how long they took.
@@ -117,6 +126,25 @@ shows *Print complete · Purifying chamber air* then, and elapsed time stops at 
 * Connection details come from OBS's own WebSocket settings file (read at connect time, never copied or logged).
   Override them with `OBS_WS_URL` / `OBS_WS_PASSWORD` in `.env`, e.g. if OBS runs on another machine.
 
+## Twitch viewer count
+
+The overlay can show how many people are watching (an eye icon in the status line, a *Viewers* row in the HUD).
+It uses Twitch's official Helix API with an app access token, which needs a Twitch app of your own:
+
+1. Open [dev.twitch.tv/console/apps/create](https://dev.twitch.tv/console/apps/create). Twitch asks for two-factor
+   authentication on your account if it's off.
+2. **Name**: anything unique. **OAuth Redirect URL**: `http://localhost`. The form requires one, but it's never
+   used, because the overlay doesn't log in as you. **Category**: any. **Client type**: Confidential.
+3. **Create**, then **Manage**: copy the **Client ID**, press **New Secret** and copy the secret.
+4. In the control panel's *Twitch viewers* card, enter your channel name, the Client ID and the secret, then **Save**.
+   Or put them in `.env` as `TWITCH_CHANNEL`, `TWITCH_CLIENT_ID` and `TWITCH_CLIENT_SECRET` and restart the server.
+   Values in `.env` take precedence, and the control panel then shows them as set there.
+
+The server checks `GET /helix/streams?user_login=<channel>` once a minute, which is about as often as Twitch
+updates the number. When the channel is offline, nothing is shown. The Client ID and secret are stored in
+`cache/twitch.json` (file mode 600, git-ignored). The control panel can replace or remove them but never reads
+them back, and they're never sent to a browser.
+
 ## Read-only by design
 
 Nothing in this project can make the printer do anything. This is enforced in code, not by convention:
@@ -135,6 +163,10 @@ Nothing in this project can make the printer do anything. This is enforced in co
 * FTPS (990) isn't used: on the X2D it only exposes external storage.
 * The access code is only sent after the printer's TLS certificate CN matches the configured serial, so another
   device that takes over the old IP never receives it.
+
+Apart from the web fonts that the pages load from Google Fonts, the server's only internet traffic is one
+MakerWorld request per new design (for the maker credit). If you set up Twitch, it also requests an app token and
+then checks the viewer count once a minute. None of this touches the printer.
 
 The tests check these guarantees (`python3 -m unittest -v`).
 
@@ -177,6 +209,8 @@ For the absolute minimum, turn off the audio meter (`meter`) in the control pane
 | `OVERLAY_HOST` / `OVERLAY_PORT` | Defaults `0.0.0.0:8787` (whole LAN); `127.0.0.1` = this Mac only |
 | `OBS_SOURCE` | Camera source whose crop is animated (default `X2D`) |
 | `OBS_WS_URL` / `OBS_WS_PASSWORD` | Optional; default to OBS's own WebSocket settings |
+| `TWITCH_CLIENT_ID` / `TWITCH_CLIENT_SECRET` | Optional; your Twitch app for the viewer count (or enter them in the control panel) |
+| `TWITCH_CHANNEL` | Optional; channel login name (the control panel's channel field overrides it) |
 
 ## Troubleshooting
 
@@ -199,7 +233,7 @@ web/overlay.js       state → layout binding, demo data, accent colour
 web/control.html     control panel
 web/preview.html     overlay over a stream frame (web/preview-bg.jpg)
 tests/test_server.py offline tests: parsing, read-only guarantees, crop animation against a fake OBS
-cache/               settings, job start times, cached plate previews (safe to delete)
+cache/               settings, job start times, cached plate previews, maker credits, Twitch app credentials
 ```
 
 Data sources and field meanings were cross-checked against

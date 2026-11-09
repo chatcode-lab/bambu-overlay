@@ -41,11 +41,13 @@ import sys
 import tempfile
 import threading
 import time
+import urllib.error
+import urllib.request
 import xml.etree.ElementTree as ET
 import zipfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import quote, urlencode, urlparse
 
 ROOT = Path(__file__).resolve().parent
 WEB_DIR = ROOT / "web"
@@ -53,6 +55,9 @@ CACHE_DIR = ROOT / "cache"
 MEDIA_DIR = CACHE_DIR / "media"
 SETTINGS_FILE = CACHE_DIR / "settings.json"
 JOBS_FILE = CACHE_DIR / "jobs.json"
+MAKERS_FILE = CACHE_DIR / "makerworld.json"   # design id -> original maker (public MakerWorld data)
+TWITCH_FILE = CACHE_DIR / "twitch.json"       # Twitch app Client ID + secret (mode 0600, never sent to browsers)
+USER_AGENT = "bambu-overlay (+https://github.com/chatcode-lab/bambu-overlay)"
 
 log = logging.getLogger("overlay")
 
@@ -69,10 +74,13 @@ DEFAULT_SETTINGS = {
     "name": "file",        # job name: file (printer's task name) | title (model title from the 3mf)
     "ams": True,           # show AMS / filament slots
     "credit": False,       # show designer + MakerWorld link
+    "byline": False,       # "by @maker" after the print name (the original maker when the model is a remix)
     "build": True,         # lower-third model preview fills up layer by layer
     "meter": True,         # Winamp-style L/R audio meter fed by OBS InputVolumeMeters
     "meterInput": "",      # OBS input to meter ("" = loudest of all inputs)
     "demo": False,         # simulate a print (for setting things up)
+    "viewers": True,       # live Twitch viewer count (once a channel + app credentials are set up)
+    "twitchChannel": "",   # Twitch login name of the channel, e.g. "mychannel"
     # OBS camera crop automation (obs-websocket)
     "obsCrop": True,       # animate the camera crop in OBS when printing starts / stops
     "cropMode": "auto",    # auto (follow printer) | printing | idle (force one, e.g. while adjusting)
@@ -90,10 +98,13 @@ _SETTING_RULES = {
     "name": lambda v: v in ("title", "file"),
     "ams": lambda v: isinstance(v, bool),
     "credit": lambda v: isinstance(v, bool),
+    "byline": lambda v: isinstance(v, bool),
     "build": lambda v: isinstance(v, bool),
     "meter": lambda v: isinstance(v, bool),
     "meterInput": lambda v: isinstance(v, str) and len(v) <= 256,
     "demo": lambda v: isinstance(v, bool),
+    "viewers": lambda v: isinstance(v, bool),
+    "twitchChannel": lambda v: isinstance(v, str) and bool(re.fullmatch(r"[A-Za-z0-9_]{0,25}", v)),
     "obsCrop": lambda v: isinstance(v, bool),
     "cropMode": lambda v: v in ("auto", "printing", "idle"),
     "cropPrint": lambda v: _crop_pair(v),
@@ -122,7 +133,7 @@ def load_env(path: Path) -> dict:
 class Config:
     def __init__(self):
         env = load_env(ROOT / ".env")
-        env.update({k: v for k, v in os.environ.items() if k.startswith(("BAMBU_", "OVERLAY_", "OBS_"))})
+        env.update({k: v for k, v in os.environ.items() if k.startswith(("BAMBU_", "OVERLAY_", "OBS_", "TWITCH_"))})
         self.ip = env.get("BAMBU_X2D_IP") or env.get("BAMBU_IP", "")
         self.access_code = (env.get("BAMBU_X2D_ACCESS_KEY") or env.get("BAMBU_X2D_ACCESS_CODE")
                             or env.get("BAMBU_ACCESS_CODE", ""))
@@ -133,6 +144,10 @@ class Config:
         self.obs_url = env.get("OBS_WS_URL", "")
         self.obs_password = env.get("OBS_WS_PASSWORD", "")
         self.obs_source = env.get("OBS_SOURCE", "X2D")
+        # Twitch app for the viewer count; alternatively entered in the control panel (stored in cache/twitch.json)
+        self.twitch_client_id = env.get("TWITCH_CLIENT_ID", "").strip()
+        self.twitch_client_secret = env.get("TWITCH_CLIENT_SECRET", "").strip()
+        self.twitch_channel = env.get("TWITCH_CHANNEL", "").strip().lstrip("@").lower()
         # without a printer the server still runs, so the layouts can be tried in demo mode (/?demo=1)
         self.has_printer = bool(self.ip and self.access_code)
 
@@ -587,6 +602,7 @@ class MediaWorker(threading.Thread):
         self.hub = hub
         self.attempts: dict[str, tuple[int, float]] = {}
         self.next_recheck: tuple[str, float] = ("", 0.0)
+        self.credit_attempts: dict[str, tuple[int, float]] = {}
 
     def run(self):
         while True:
@@ -595,6 +611,7 @@ class MediaWorker(threading.Thread):
             want = self.hub.wanted_media()
             if not want:
                 continue
+            self._credit(want)
             media = self.hub.media
             if media.get("key") == want["key"]:
                 self._recheck(want, media.get("meta") or {})
@@ -613,6 +630,25 @@ class MediaWorker(threading.Thread):
                 self.attempts[want["key"]] = (count + 1, time.monotonic() + delay)
                 log.info("Media: %s (retry in %ds)", e, delay)
                 self.hub.set_media_status(f"model not available yet: {e}")
+
+    def _credit(self, want):
+        """Look up the model's original maker on MakerWorld once per design (public data, cached)."""
+        design = want.get("design") or ""
+        if not design.isdigit() or int(design) == 0 or design in self.hub.makers:
+            return
+        count, not_before = self.credit_attempts.get(design, (0, 0.0))
+        if count >= 5 or time.monotonic() < not_before:
+            return
+        try:
+            info = resolve_maker(int(design))
+        except Exception as e:
+            self.credit_attempts[design] = (count + 1, time.monotonic() + 120 * (count + 1))
+            log.info("MakerWorld: no credit for design %s yet (%s)", design, e)
+            return
+        self.hub.set_maker(design, info)
+        m, u = info.get("maker") or {}, info.get("uploader") or {}
+        log.info("MakerWorld: design %s by %s%s", design, m.get("handle") or m.get("name") or "?",
+                 f" (remix uploaded by {u.get('handle') or u.get('name')})" if info.get("remix") and m != u else "")
 
     def _recheck(self, want, meta):
         delay = recheck_delay(meta, want, time.time())
@@ -733,6 +769,163 @@ def pick_model_file(files: list[dict], task_name: str, gcode_file: str) -> dict 
     if gcode_file and gcode_file.lower().endswith(".3mf"):
         hits += [f for f in files if f.get("path") == gcode_file]
     return max(hits, key=lambda f: f.get("time") or 0) if hits else None
+
+
+# --------------------------------------------------------------------------- web APIs (MakerWorld, Twitch)
+# Plain HTTPS GETs of public data, plus the Twitch app-token request. Nothing here talks to the printer.
+
+def http_json(url: str, *, data: dict | None = None, headers: dict | None = None, timeout: float = 10):
+    """GET (or form POST when data is given) and parse a JSON reply. Raises urllib.error.HTTPError on 4xx/5xx."""
+    req = urllib.request.Request(url, data=urlencode(data).encode() if data is not None else None,
+                                 headers={"User-Agent": USER_AGENT, "Accept": "application/json", **(headers or {})})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return json.loads(r.read(4_000_000))
+
+
+MAKERWORLD_DESIGN = "https://makerworld.com/api/v1/design-service/design/{}"
+MAKER_LOOKUP_DEPTH = 4   # remix of a remix of ...: follow at most this many designs
+
+
+def fetch_makerworld_design(design_id: int) -> dict:
+    d = http_json(MAKERWORLD_DESIGN.format(int(design_id)))
+    if not isinstance(d, dict) or not d.get("id"):
+        raise ValueError(f"MakerWorld returned no design {design_id}")
+    return d
+
+
+def _mw_person(creator: dict | None, homepage: str = "", author: str = "") -> dict | None:
+    creator = creator or {}
+    handle = str(creator.get("handle") or "").strip()
+    if not handle and (m := re.search(r"makerworld\.com/@([\w.-]+)", homepage or "")):
+        handle = m.group(1)
+    name = str(creator.get("name") or author or "").strip()
+    return {"handle": handle[:40], "name": (name or handle)[:60]} if handle or name else None
+
+
+def resolve_maker(design_id: int, fetch=fetch_makerworld_design) -> dict:
+    """Who made a MakerWorld design. For a remix that's the maker of the original, found by following the
+    design's "originals" back to a design that has none. An original hosted elsewhere is credited by its
+    author's name when MakerWorld has one (not just a URL); otherwise the uploader keeps the credit."""
+    d = fetch(design_id)
+    uploader = _mw_person(d.get("designCreator"))
+    maker, remix = uploader, False
+    for _ in range(MAKER_LOOKUP_DEPTH):
+        originals = d.get("originals") or []
+        if not originals:
+            break
+        remix, o = True, originals[0]
+        inside = o.get("insideOriginalInfo") or {}
+        person = _mw_person(inside.get("designCreator"), str(o.get("homepage") or ""), str(o.get("author") or ""))
+        if not person or re.match(r"(?i)(https?://|www\.)", person["name"]) and not person["handle"]:
+            break   # e.g. a Sketchfab link with no author name
+        maker = person
+        nxt = _int(inside.get("designId") or o.get("designId"))
+        if not nxt or nxt == _int(d.get("id")):
+            break
+        try:
+            d = fetch(nxt)
+        except Exception:
+            break   # keep the credit found so far
+    return {"maker": maker, "uploader": uploader, "remix": remix}
+
+
+TWITCH_TOKEN = "https://id.twitch.tv/oauth2/token"
+TWITCH_STREAMS = "https://api.twitch.tv/helix/streams?user_login={}"
+TWITCH_POLL = 60          # s between viewer-count checks (Twitch itself refreshes the count about once a minute)
+TWITCH_ID_RE = re.compile(r"[A-Za-z0-9]{20,64}")
+
+
+def load_twitch_creds() -> dict:
+    d = load_json(TWITCH_FILE, {})
+    return {k: d[k] for k in ("clientId", "clientSecret") if isinstance(d.get(k), str) and TWITCH_ID_RE.fullmatch(d[k])}
+
+
+def save_twitch_creds(creds: dict) -> None:
+    """Owner-only file in cache/ (git-ignored). Removing both values deletes it."""
+    if not creds:
+        TWITCH_FILE.unlink(missing_ok=True)
+        return
+    TWITCH_FILE.parent.mkdir(parents=True, exist_ok=True)
+    tmp = TWITCH_FILE.with_suffix(".tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        json.dump(creds, f)
+    os.chmod(tmp, 0o600)
+    tmp.replace(TWITCH_FILE)
+
+
+def _http_error_text(e: urllib.error.HTTPError) -> str:
+    try:
+        msg = json.loads(e.read(2000) or b"{}").get("message") or ""
+    except Exception:
+        msg = ""
+    return f"HTTP {e.code}{': ' + str(msg)[:120] if msg else ''}"
+
+
+class TwitchViewers(threading.Thread):
+    """Polls the Helix "Get Streams" endpoint for the channel's live viewer count with an app access token
+    (client-credentials flow: no user login, no redirect is ever used)."""
+
+    def __init__(self, hub: "Hub", http=http_json):
+        super().__init__(name="twitch", daemon=True)
+        self.hub, self.http = hub, http
+        self.token: tuple[str, str] | None = None   # (credentials fingerprint, access token), memory only
+
+    def run(self):
+        while True:
+            delay = self.poll()
+            self.hub.twitch_wakeup.wait(delay)
+            self.hub.twitch_wakeup.clear()
+
+    def poll(self) -> float:
+        hub = self.hub
+        with hub.cond:
+            channel = str(hub.settings.get("twitchChannel") or hub.twitch_env_channel or "").lower()
+            creds = dict(hub.twitch_creds)
+        if not (channel and creds.get("clientId") and creds.get("clientSecret")):
+            self.token = None
+            missing = [n for n, ok in (("channel", channel), ("Client ID", creds.get("clientId")),
+                                       ("secret", creds.get("clientSecret"))) if not ok]
+            hub.set_twitch(status=f"not set up (missing {', '.join(missing)})" if len(missing) < 3 else "not set up",
+                           live=False, viewers=None)
+            return 3600   # woken up when the channel or the credentials change
+        if not all(TWITCH_ID_RE.fullmatch(creds[k]) for k in ("clientId", "clientSecret")):
+            hub.set_twitch(status="the Client ID or secret doesn't look like a Twitch value (20-64 letters and digits)",
+                           live=False, viewers=None)
+            return 3600
+        fp = hashlib.sha256(f"{creds['clientId']}:{creds['clientSecret']}".encode()).hexdigest()
+        try:
+            for attempt in (1, 2):
+                if not self.token or self.token[0] != fp:
+                    try:
+                        tok = self.http(TWITCH_TOKEN, data={"client_id": creds["clientId"],
+                                                            "client_secret": creds["clientSecret"],
+                                                            "grant_type": "client_credentials"})
+                    except urllib.error.HTTPError as e:
+                        hub.set_twitch(status=f"Twitch refused the Client ID / secret ({_http_error_text(e)})",
+                                       live=False, viewers=None)
+                        return 600
+                    self.token = (fp, str(tok["access_token"]))
+                try:
+                    reply = self.http(TWITCH_STREAMS.format(quote(channel)),
+                                      headers={"Client-Id": creds["clientId"], "Authorization": f"Bearer {self.token[1]}"})
+                    break
+                except urllib.error.HTTPError as e:
+                    if e.code == 401 and attempt == 1:   # token expired or revoked: get a new one once
+                        self.token = None
+                        continue
+                    raise
+            stream = next(iter(reply.get("data") or []), None)
+            live = bool(stream) and stream.get("type", "live") == "live"
+            hub.set_twitch(status="live" if live else "offline", live=live,
+                           viewers=_int(stream.get("viewer_count")) if live else None, checked=time.time())
+            return TWITCH_POLL
+        except urllib.error.HTTPError as e:
+            hub.set_twitch(status=f"error: {_http_error_text(e)}", live=False, viewers=None)
+            return 300
+        except Exception as e:
+            hub.set_twitch(status=f"error: {getattr(e, 'reason', None) or type(e).__name__}", live=False, viewers=None)
+            return 120
 
 
 # --------------------------------------------------------------------------- SSDP (passive)
@@ -1437,6 +1630,8 @@ def build_view(hub: "Hub") -> dict:
     task = str(p.get("subtask_name") or "")
     design_id = str(p.get("design_id") or "")
     plate = job_plate(p) or 1
+    mw = hub.makers.get(design_id) if design_id.isdigit() else None
+    maker = (mw or {}).get("maker") or ({"handle": "", "name": meta["designer"]} if meta.get("designer") else None)
     job_rec = hub.jobs.get(hub.job_key or "", {})
     started = job_rec.get("start")
     if (not started or job_rec.get("src") == "first-seen") and meta.get("fileTime"):
@@ -1450,6 +1645,7 @@ def build_view(hub: "Hub") -> dict:
         "hasJob": state in JOB_STATES and bool(task), "active": state in ACTIVE_STATES, "finishing": finishing,
         "task": task, "fileName": _pretty_name(task), "title": meta.get("title"),
         "designer": meta.get("designer"), "license": meta.get("license"),
+        "maker": {**maker, "remix": bool((mw or {}).get("remix"))} if maker else None,
         "makerworld": f"makerworld.com/models/{design_id}" if design_id.isdigit() and design_id != "0" else None,
         "plate": plate, "plateCount": _int(p.get("plate_cnt")) or None,
         "progress": max(0, min(100, _int(p.get("mc_percent")))),
@@ -1475,6 +1671,7 @@ def build_view(hub: "Hub") -> dict:
                     "status": hub.mqtt_status, "media": hub.media_status, "lastReport": hub.last_report},
         "settings": hub.settings,
         "obs": dict(hub.obs),
+        "twitch": {**hub.twitch, **hub.twitch_public()},
         "job": view_job,
         "temps": {"nozzles": nozzles, "bed": bed, "chamber": chamber},
         "fans": {"part": _fan_pct(p.get("cooling_fan_speed")), "aux": _fan_pct(p.get("big_fan1_speed")),
@@ -1521,6 +1718,14 @@ class Hub:
                     "meter": "starting", "meterInputs": [], "meterMuted": []}
         self.meter: list[float] | None = None   # [magL, magR, peakL, peakR], pushed ~20x/s
         self.meter_seq = 0
+        self.makers: dict = load_json(MAKERS_FILE, {})   # MakerWorld design id -> resolve_maker() result
+        self.twitch = {"status": "not set up", "live": False, "viewers": None, "checked": None}
+        env_creds = {k: v for k, v in (("clientId", getattr(cfg, "twitch_client_id", "")),
+                                       ("clientSecret", getattr(cfg, "twitch_client_secret", ""))) if v}
+        self.twitch_env = bool(env_creds)   # .env wins over credentials saved from the control panel
+        self.twitch_creds: dict = env_creds or load_twitch_creds()
+        self.twitch_env_channel = getattr(cfg, "twitch_channel", "")
+        self.twitch_wakeup = threading.Event()
 
     # -- changes (all called from worker threads)
     def _bump(self):
@@ -1594,6 +1799,7 @@ class Hub:
             rec = self.jobs.get(self.job_key, {})
             return {"key": self.job_key, "name": str(p.get("subtask_name") or ""),
                     "gcode_file": str(p.get("gcode_file") or ""), "plate": job_plate(p),
+                    "design": str(p.get("design_id") or ""),
                     "state": str(p.get("gcode_state") or "").upper(),
                     "start": rec.get("start"), "src": rec.get("src")}
 
@@ -1609,6 +1815,47 @@ class Hub:
             self.media_status = status
             self._bump()
 
+    def set_maker(self, design_id: str, info: dict):
+        with self.cond:
+            self.makers[design_id] = {**info, "t": int(time.time())}
+            self.makers = dict(list(self.makers.items())[-200:])
+            save_json(MAKERS_FILE, self.makers)
+            self._bump()
+
+    def set_twitch(self, **changes):
+        with self.cond:
+            if any(self.twitch.get(k) != v for k, v in changes.items()):
+                self.twitch.update(changes)
+                self._bump()   # at most once a minute
+
+    def set_twitch_creds(self, client_id: str | None, client_secret: str | None, clear: bool = False) -> dict:
+        """client_id / client_secret None = keep the stored value. Returns what the browser may see."""
+        if self.twitch_env:
+            raise ValueError("The Client ID and secret are set in .env; change them there")
+        for v in (client_id, client_secret):
+            if v is not None and v != "" and not TWITCH_ID_RE.fullmatch(v):
+                raise ValueError("Client ID and secret are 20-64 letters and digits, as shown on dev.twitch.tv")
+        with self.cond:
+            creds = {} if clear else dict(self.twitch_creds)
+            if client_id is not None:
+                if client_id != creds.get("clientId"):
+                    creds.pop("clientSecret", None)   # a secret belongs to one app
+                creds["clientId"] = client_id
+            if client_secret:
+                creds["clientSecret"] = client_secret
+            creds = {k: v for k, v in creds.items() if v}
+            save_twitch_creds(creds)
+            self.twitch_creds = creds
+            self._bump()
+        self.twitch_wakeup.set()
+        return self.twitch_public()
+
+    def twitch_public(self) -> dict:
+        c = self.twitch_creds
+        return {"hasClientId": bool(c.get("clientId")), "hasSecret": bool(c.get("clientSecret")),
+                "clientIdTail": c.get("clientId", "")[-4:], "source": "env" if self.twitch_env else "panel",
+                "envChannel": self.twitch_env_channel}
+
     def update_settings(self, patch: dict) -> dict:
         bad = [k for k, v in patch.items() if k not in _SETTING_RULES or not _SETTING_RULES[k](v)]
         if bad:
@@ -1618,6 +1865,8 @@ class Hub:
             # persist only what differs from the defaults, so improved defaults still reach old installs
             save_json(SETTINGS_FILE, {k: v for k, v in self.settings.items() if DEFAULT_SETTINGS.get(k) != v})
             self._bump()
+            if "twitchChannel" in patch:
+                self.twitch_wakeup.set()
             return dict(self.settings)
 
     def push_meter(self, levels: list[float] | None):
@@ -1713,13 +1962,18 @@ def make_handler(hub: Hub):
             self._send(200, target.read_bytes(), CONTENT_TYPES.get(target.suffix, "application/octet-stream"))
 
         def do_POST(self):
-            if urlparse(self.path).path != "/api/settings":
+            path = urlparse(self.path).path
+            if path not in ("/api/settings", "/api/twitch"):
                 return self._send(404, b"not found", "text/plain")
             try:
                 length = min(int(self.headers.get("Content-Length") or 0), 10_000)
                 patch = json.loads(self.rfile.read(length) or b"{}")
                 if not isinstance(patch, dict):
                     raise ValueError("expected a JSON object")
+                if path == "/api/twitch":   # write-only: the secret is never sent back
+                    get = lambda k: str(patch[k]).strip() if isinstance(patch.get(k), str) else None
+                    return self._json(hub.set_twitch_creds(get("clientId"), get("clientSecret"),
+                                                           clear=patch.get("clear") is True))
                 self._json(hub.update_settings(patch))
             except ValueError as e:
                 self._json({"error": str(e)}, 400)
@@ -1784,7 +2038,7 @@ def main():
     CACHE_DIR.mkdir(exist_ok=True)
     hub = Hub(cfg)
     printer = [SsdpWatcher(hub), ReadOnlyMqtt(hub), MediaWorker(hub)] if cfg.has_printer else []
-    for worker in printer + [ObsCropController(hub), ObsMeterReader(hub)]:
+    for worker in printer + [ObsCropController(hub), ObsMeterReader(hub), TwitchViewers(hub)]:
         worker.start()
     server = OverlayHTTPServer((cfg.host, cfg.port), make_handler(hub))
     base = f"http://{'127.0.0.1' if cfg.host in ('0.0.0.0', '') else cfg.host}:{cfg.port}"

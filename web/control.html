@@ -63,6 +63,10 @@
   .pair input { width: 86px; background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; font: 500 13px ui-monospace, "SF Mono", Menlo, monospace; }
   .pair span { color: var(--ink3); font-size: 12.5px; margin-right: 8px; }
   .pill.warn i { background: var(--warn); }
+  .txt { width: 100%; background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; font: 500 13px ui-monospace, "SF Mono", Menlo, monospace; }
+  .txt:focus, .pair input:focus { outline: none; border-color: #3a4256; }
+  .txt:disabled, .btn:disabled { opacity: .45; cursor: not-allowed; }
+  a { color: var(--acc); }
   @media (max-width: 900px) { .cropgrid { grid-template-columns: 1fr; } }
   @media (max-width: 900px) { main { grid-template-columns: 1fr; padding: 14px; } header { padding: 12px 14px; } }
 </style>
@@ -110,7 +114,9 @@
       <div class="seg" data-key="idle"><button data-v="show">Show printer status</button><button data-v="hide">Hide overlay</button></div>
     </div>
     <div class="tog">AMS / filament slots <input type="checkbox" data-key="ams"></div>
-    <div class="tog">Designer & MakerWorld credit <input type="checkbox" data-key="credit"></div>
+    <div class="tog">"by @maker" after the print name <input type="checkbox" data-key="byline"></div>
+    <div class="tog">Designer & MakerWorld link <input type="checkbox" data-key="credit"></div>
+    <p class="muted" style="margin:0 0 8px">For a remix, both credit the maker of the original model (looked up on MakerWorld).</p>
     <div class="tog">Model preview builds up layer by layer <input type="checkbox" data-key="build"></div>
     <div class="tog">Audio meter (OBS levels, Winamp style) <input type="checkbox" data-key="meter"></div>
     <div class="field" style="margin-top:8px"><label>Meter source <span class="muted" id="meterStatus"></span></label>
@@ -140,6 +146,29 @@
           <input type="range" id="cropDuration" min="0" max="6" step="0.1">
         </div>
         <p class="muted">Keep top + bottom the same in both modes (360 now) so the view pans without zooming. Only the top/bottom crop of the camera source is changed; everything else stays as set in OBS.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="card gallery" id="twitchCard">
+    <h2>Twitch viewers</h2>
+    <div class="cropgrid">
+      <div>
+        <div class="tog" style="border-top:0;padding-top:0">Show the live viewer count on the overlay <input type="checkbox" data-key="viewers"></div>
+        <div class="field"><label>Channel (login name)</label><input class="txt" id="twChannel" placeholder="yourchannel" maxlength="60" autocomplete="off" spellcheck="false"></div>
+        <div class="field"><label>Client ID <span class="muted" id="twIdState"></span></label><input class="txt" id="twId" autocomplete="off" spellcheck="false"></div>
+        <div class="field"><label>Client secret <span class="muted" id="twSecretState"></span></label><input class="txt" id="twSecret" type="password" autocomplete="new-password" spellcheck="false"></div>
+        <div class="row" style="margin-top:0;justify-content:flex-start"><button class="btn" id="twSave">Save</button><button class="btn" id="twClear">Remove credentials</button><span class="muted" id="twMsg"></span></div>
+        <p class="muted" id="twStatus">—</p>
+      </div>
+      <div>
+        <ol style="margin-top:0">
+          <li>Open <a href="https://dev.twitch.tv/console/apps/create" target="_blank" rel="noopener">dev.twitch.tv/console/apps/create</a> and log in. Twitch asks for two-factor authentication on your account first if it's off.</li>
+          <li><b>Name</b>: anything unique, e.g. <code>bambu-overlay-yourchannel</code>. <b>OAuth Redirect URL</b>: <code>http://localhost</code>. The form requires one, but it's never used, because the overlay doesn't log in as you. <b>Category</b>: any, e.g. Other. <b>Client type</b>: Confidential.</li>
+          <li><b>Create</b>, then <b>Manage</b>: copy the <b>Client ID</b>, press <b>New Secret</b> and copy the secret.</li>
+          <li>Paste both here, add your channel name and press <b>Save</b>. While you're live, the count updates about once a minute.</li>
+        </ol>
+        <p class="muted">The secret stays on this computer (<code>cache/twitch.json</code>, readable only by your user account) and is never sent back to a browser. Only the public viewer count is read.</p>
       </div>
     </div>
   </section>
@@ -215,6 +244,37 @@
     for (const inp of document.querySelectorAll('[data-crop]'))
       if (document.activeElement !== inp) inp.value = settings[inp.dataset.crop]?.[+inp.dataset.i] ?? '';
     $('#cropDuration').value = settings.cropDuration; $('#durVal').textContent = `${(+settings.cropDuration).toFixed(1)} s`;
+    if (document.activeElement !== $('#twChannel')) $('#twChannel').value = settings.twitchChannel || '';
+  }
+
+  // ---- Twitch: the channel is a normal setting; the Client ID + secret go to a write-only endpoint
+  const twLogin = (v) => v.trim().replace(/^.*twitch\.tv\//i, '').replace(/^@/, '').replace(/[/?#].*$/, '');
+  $('#twChannel').addEventListener('change', (e) => { e.target.value = twLogin(e.target.value); save({ twitchChannel: e.target.value }); });
+  async function twPost(body) {
+    const r = await fetch('/api/twitch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const out = await r.json().catch(() => ({}));
+    $('#twMsg').textContent = r.ok ? 'Saved' : (out.error || 'Not saved');
+    if (r.ok) { $('#twId').value = ''; $('#twSecret').value = ''; setTimeout(() => ($('#twMsg').textContent = ''), 2500); }
+  }
+  $('#twSave').onclick = async () => {
+    const login = twLogin($('#twChannel').value);
+    if (login !== (settings.twitchChannel || '')) await save({ twitchChannel: login });
+    const body = {}, id = $('#twId').value.trim(), secret = $('#twSecret').value.trim();
+    if (id) body.clientId = id;
+    if (secret) body.clientSecret = secret;
+    if (Object.keys(body).length) await twPost(body);
+  };
+  $('#twClear').onclick = () => { if (confirm('Remove the saved Twitch Client ID and secret?')) twPost({ clear: true }); };
+  function twitchStatus(v) {
+    const t = v?.twitch || {};
+    const env = t.source === 'env';
+    $('#twIdState').textContent = env ? `(set in .env, …${t.clientIdTail})` : t.hasClientId ? `(saved …${t.clientIdTail}; leave empty to keep)` : '';
+    $('#twSecretState').textContent = env ? (t.hasSecret ? '(set in .env)' : '(missing in .env)') : t.hasSecret ? '(saved; leave empty to keep)' : '';
+    for (const id of ['#twId', '#twSecret', '#twClear']) $(id).disabled = env;
+    $('#twChannel').placeholder = t.envChannel ? `${t.envChannel} (from .env)` : 'yourchannel';
+    const n = t.viewers;
+    $('#twStatus').textContent = 'Status: ' + (t.status === 'live' ? `live · ${n} viewer${n === 1 ? '' : 's'}` : t.status === 'offline' ? 'channel is offline' : (t.status || '—'))
+      + (t.checked && (t.status === 'live' || t.status === 'offline') ? ` · checked ${ago(t.checked)}` : '');
   }
   for (const inp of document.querySelectorAll('[data-crop]'))
     inp.addEventListener('change', () => {
@@ -256,7 +316,7 @@
     const n = v.temps.nozzles.map((x) => `${x.side || ''} ${x.cur}°/${x.tgt}°`).join('  ');
     const rows = [
       ['IP', v.printer.ip], ['Serial', '…' + v.printer.serialTail], ['MQTT', v.printer.status], ['Last report', ago(v.printer.lastReport)],
-      ['Wi-Fi', v.printer.wifi || '—'], ['Job file', j.task || '—'], ['Model', j.title ? `${j.title}${j.designer ? ' by ' + j.designer : ''}` : '—'],
+      ['Wi-Fi', v.printer.wifi || '—'], ['Job file', j.task || '—'], ['Model', j.title ? `${j.title}${j.maker ? ` by ${j.maker.handle ? '@' + j.maker.handle : j.maker.name}${j.maker.remix ? ' (original maker of this remix)' : ''}` : ''}` : '—'],
       ['Model data', v.printer.media], ['OBS source', `${o.source || '—'} (${o.items || 0} in scenes)`], ['Nozzles', n], ['Bed', `${v.temps.bed.cur}°/${v.temps.bed.tgt}°`],
       ['Chamber', v.temps.chamber ? `${v.temps.chamber.cur}°` : '—'],
     ];
@@ -287,6 +347,7 @@
     const fresh = JSON.stringify(last.settings);
     if (fresh !== JSON.stringify(settings)) { settings = last.settings; paint(); }
     meterOptions(last);
+    twitchStatus(last);
     status();
   };
   es.onerror = () => { last = null; status(); for (const f of document.querySelectorAll('iframe')) relay(f); };
