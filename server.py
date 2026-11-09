@@ -74,13 +74,21 @@ DEFAULT_SETTINGS = {
     "name": "file",        # job name: file (printer's task name) | title (model title from the 3mf)
     "ams": True,           # show AMS / filament slots
     "credit": False,       # show designer + MakerWorld link
-    "byline": False,       # "by @maker" after the print name (the original maker when the model is a remix)
+    "byline": False,       # "by maker" after the print name (the original maker when the model is a remix)
     "build": True,         # lower-third model preview fills up layer by layer
     "meter": True,         # Winamp-style L/R audio meter fed by OBS InputVolumeMeters
     "meterInput": "",      # OBS input to meter ("" = loudest of all inputs)
     "demo": False,         # simulate a print (for setting things up)
     "viewers": True,       # live Twitch viewer count (once a channel + app credentials are set up)
     "twitchChannel": "",   # Twitch login name of the channel, e.g. "mychannel"
+    # your socials in the lower third, under the audio meter; the same handle is shown once with all its icons
+    "socialTwitch": True,      # handle = the Twitch channel (shown only once a channel is set)
+    "socialTiktok": False,
+    "socialX": False,
+    "socialInstagram": False,
+    "tiktokHandle": "",
+    "xHandle": "",
+    "instagramHandle": "",
     # OBS camera crop automation (obs-websocket)
     "obsCrop": True,       # animate the camera crop in OBS when printing starts / stops
     "cropMode": "auto",    # auto (follow printer) | printing | idle (force one, e.g. while adjusting)
@@ -105,12 +113,23 @@ _SETTING_RULES = {
     "demo": lambda v: isinstance(v, bool),
     "viewers": lambda v: isinstance(v, bool),
     "twitchChannel": lambda v: isinstance(v, str) and bool(re.fullmatch(r"[A-Za-z0-9_]{0,25}", v)),
+    "socialTwitch": lambda v: isinstance(v, bool),
+    "socialTiktok": lambda v: isinstance(v, bool),
+    "socialX": lambda v: isinstance(v, bool),
+    "socialInstagram": lambda v: isinstance(v, bool),
+    "tiktokHandle": lambda v: _handle(v),
+    "xHandle": lambda v: _handle(v),
+    "instagramHandle": lambda v: _handle(v),
     "obsCrop": lambda v: isinstance(v, bool),
     "cropMode": lambda v: v in ("auto", "printing", "idle"),
     "cropPrint": lambda v: _crop_pair(v),
     "cropIdle": lambda v: _crop_pair(v),
     "cropDuration": lambda v: isinstance(v, (int, float)) and 0 <= v <= 10,
 }
+
+
+def _handle(v) -> bool:
+    return isinstance(v, str) and bool(re.fullmatch(r"[A-Za-z0-9._]{0,30}", v))
 
 
 def _crop_pair(v) -> bool:

@@ -323,6 +323,15 @@ class TwitchTests(HubTestCase):
         with self.assertRaises(ValueError):
             self.hub.update_settings({"twitchChannel": "twitch.tv/me"})
 
+    def test_social_handles(self):
+        self.assertTrue(self.hub.settings["socialTwitch"])   # on by default; shown once a channel is set
+        self.assertFalse(any(self.hub.settings[k] for k in ("socialTiktok", "socialX", "socialInstagram")))
+        s = self.hub.update_settings({"tiktokHandle": "borkasm", "instagramHandle": "bor.ka", "socialX": True})
+        self.assertEqual((s["tiktokHandle"], s["instagramHandle"], s["socialX"]), ("borkasm", "bor.ka", True))
+        for bad in ("@borkasm", "x.com/karulin", "a b", "<b>"):
+            with self.assertRaises(ValueError):
+                self.hub.update_settings({"xHandle": bad})
+
 
 class CropTargetTests(HubTestCase):
     def test_follows_printer_state(self):

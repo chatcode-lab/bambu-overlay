@@ -42,10 +42,10 @@
   input[type=range] { width: 100%; accent-color: var(--acc); }
   input[type=color] { width: 42px; height: 32px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); padding: 2px; cursor: pointer; }
   .tog { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-top: 1px solid var(--line); font-size: 13px; color: var(--ink2); }
-  .tog input { width: 36px; height: 20px; appearance: none; background: var(--line); border-radius: 99px; position: relative; cursor: pointer; transition: background .2s; }
-  .tog input::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: left .2s; }
-  .tog input:checked { background: var(--acc); }
-  .tog input:checked::after { left: 18px; }
+  .tog input[type=checkbox] { width: 36px; height: 20px; appearance: none; background: var(--line); border-radius: 99px; position: relative; cursor: pointer; transition: background .2s; }
+  .tog input[type=checkbox]::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: left .2s; }
+  .tog input[type=checkbox]:checked { background: var(--acc); }
+  .tog input[type=checkbox]:checked::after { left: 18px; }
   code, .url { font: 12.5px ui-monospace, "SF Mono", Menlo, monospace; }
   .url { display: flex; gap: 8px; align-items: center; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 8px 8px 8px 12px; }
   .url span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -66,6 +66,9 @@
   .txt { width: 100%; background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; font: 500 13px ui-monospace, "SF Mono", Menlo, monospace; }
   .txt:focus, .pair input:focus { outline: none; border-color: #3a4256; }
   .txt:disabled, .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .socgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); column-gap: 28px; }
+  .soc-row { display: grid; grid-template-columns: 92px 1fr auto; align-items: center; gap: 12px; }
+  .soc-row .txt { padding: 5px 9px; }
   a { color: var(--acc); }
   @media (max-width: 900px) { .cropgrid { grid-template-columns: 1fr; } }
   @media (max-width: 900px) { main { grid-template-columns: 1fr; padding: 14px; } header { padding: 12px 14px; } }
@@ -114,7 +117,7 @@
       <div class="seg" data-key="idle"><button data-v="show">Show printer status</button><button data-v="hide">Hide overlay</button></div>
     </div>
     <div class="tog">AMS / filament slots <input type="checkbox" data-key="ams"></div>
-    <div class="tog">"by @maker" after the print name <input type="checkbox" data-key="byline"></div>
+    <div class="tog">"by maker" after the print name <input type="checkbox" data-key="byline"></div>
     <div class="tog">Designer & MakerWorld link <input type="checkbox" data-key="credit"></div>
     <p class="muted" style="margin:0 0 8px">For a remix, both credit the maker of the original model (looked up on MakerWorld).</p>
     <div class="tog">Model preview builds up layer by layer <input type="checkbox" data-key="build"></div>
@@ -171,6 +174,17 @@
         <p class="muted">The secret stays on this computer (<code>cache/twitch.json</code>, readable only by your user account) and is never sent back to a browser. Only the public viewer count is read.</p>
       </div>
     </div>
+  </section>
+
+  <section class="card gallery" id="socialCard">
+    <h2>Your socials (lower third, under the audio meter)</h2>
+    <div class="socgrid">
+      <div class="tog soc-row"><span>Twitch</span><span class="muted" id="twHandle"></span><input type="checkbox" data-key="socialTwitch"></div>
+      <div class="tog soc-row"><span>TikTok</span><input class="txt" data-handle="tiktokHandle" placeholder="username" maxlength="30" autocomplete="off" spellcheck="false"><input type="checkbox" data-key="socialTiktok"></div>
+      <div class="tog soc-row"><span>X</span><input class="txt" data-handle="xHandle" placeholder="username" maxlength="30" autocomplete="off" spellcheck="false"><input type="checkbox" data-key="socialX"></div>
+      <div class="tog soc-row"><span>Instagram</span><input class="txt" data-handle="instagramHandle" placeholder="username" maxlength="30" autocomplete="off" spellcheck="false"><input type="checkbox" data-key="socialInstagram"></div>
+    </div>
+    <p class="muted" style="margin-bottom:0">Platforms with the same username are shown once, with all their logos (e.g. TikTok + Twitch name). The Twitch username is the channel set above.</p>
   </section>
 
   <section class="card gallery">
@@ -245,7 +259,21 @@
       if (document.activeElement !== inp) inp.value = settings[inp.dataset.crop]?.[+inp.dataset.i] ?? '';
     $('#cropDuration').value = settings.cropDuration; $('#durVal').textContent = `${(+settings.cropDuration).toFixed(1)} s`;
     if (document.activeElement !== $('#twChannel')) $('#twChannel').value = settings.twitchChannel || '';
+    for (const inp of document.querySelectorAll('[data-handle]'))
+      if (document.activeElement !== inp) inp.value = settings[inp.dataset.handle] || '';
+    twHandle();
   }
+  function twHandle() {
+    const ch = settings.twitchChannel || last?.twitch?.envChannel || '';
+    $('#twHandle').textContent = ch ? `${ch} (the channel)` : 'set the channel in the Twitch card';
+  }
+  for (const inp of document.querySelectorAll('[data-handle]'))
+    inp.addEventListener('change', async () => {
+      const v = inp.value.trim().replace(/^.*\/(?=[^/]+\/?$)/, '').replace(/\/$/, '').replace(/^@/, '');
+      inp.value = v;
+      await save({ [inp.dataset.handle]: v });
+      if (settings[inp.dataset.handle] !== v) inp.value = settings[inp.dataset.handle] || '';
+    });
 
   // ---- Twitch: the channel is a normal setting; the Client ID + secret go to a write-only endpoint
   const twLogin = (v) => v.trim().replace(/^.*twitch\.tv\//i, '').replace(/^@/, '').replace(/[/?#].*$/, '');
@@ -271,6 +299,7 @@
     $('#twIdState').textContent = env ? `(set in .env, …${t.clientIdTail})` : t.hasClientId ? `(saved …${t.clientIdTail}; leave empty to keep)` : '';
     $('#twSecretState').textContent = env ? (t.hasSecret ? '(set in .env)' : '(missing in .env)') : t.hasSecret ? '(saved; leave empty to keep)' : '';
     for (const id of ['#twId', '#twSecret', '#twClear']) $(id).disabled = env;
+    twHandle();
     $('#twChannel').placeholder = t.envChannel ? `${t.envChannel} (from .env)` : 'yourchannel';
     const n = t.viewers;
     $('#twStatus').textContent = 'Status: ' + (t.status === 'live' ? `live · ${n} viewer${n === 1 ? '' : 's'}` : t.status === 'offline' ? 'channel is offline' : (t.status || '—'))
@@ -316,7 +345,7 @@
     const n = v.temps.nozzles.map((x) => `${x.side || ''} ${x.cur}°/${x.tgt}°`).join('  ');
     const rows = [
       ['IP', v.printer.ip], ['Serial', '…' + v.printer.serialTail], ['MQTT', v.printer.status], ['Last report', ago(v.printer.lastReport)],
-      ['Wi-Fi', v.printer.wifi || '—'], ['Job file', j.task || '—'], ['Model', j.title ? `${j.title}${j.maker ? ` by ${j.maker.handle ? '@' + j.maker.handle : j.maker.name}${j.maker.remix ? ' (original maker of this remix)' : ''}` : ''}` : '—'],
+      ['Wi-Fi', v.printer.wifi || '—'], ['Job file', j.task || '—'], ['Model', j.title ? `${j.title}${j.maker ? ` by ${j.maker.handle || j.maker.name}${j.maker.remix ? ' (original maker of this remix)' : ''}` : ''}` : '—'],
       ['Model data', v.printer.media], ['OBS source', `${o.source || '—'} (${o.items || 0} in scenes)`], ['Nozzles', n], ['Bed', `${v.temps.bed.cur}°/${v.temps.bed.tgt}°`],
       ['Chamber', v.temps.chamber ? `${v.temps.chamber.cur}°` : '—'],
     ];

@@ -4,7 +4,8 @@
 
   const stage = document.getElementById('stage');
   const DEFAULTS = { layout: 'glass', accent: 'auto', position: 'auto', side: 'left', scale: 1, idle: 'show',
-    name: 'file', ams: true, credit: false, byline: false, build: true, meter: true, viewers: true, demo: false };
+    name: 'file', ams: true, credit: false, byline: false, build: true, meter: true, viewers: true, demo: false,
+    socialTwitch: true, socialTiktok: false, socialX: false, socialInstagram: false, tiktokHandle: '', xHandle: '', instagramHandle: '' };
   const DEFAULT_POS = { glass: 'bl', orb: 'tl', minimal: 'br' };
   const FALLBACK_ACCENT = '#4fe3c1';
 
@@ -162,13 +163,15 @@
     m.statusUpper = m.statusTxt.toUpperCase();
     m.name = j.hasJob ? ((s.name === 'title' && j.title) || j.fileName || 'Untitled') : 'Bambu Lab X2D';
     const mk = j.hasJob ? j.maker : null;   // the original maker when the model is a remix
-    m.maker = mk ? (mk.handle ? `@${mk.handle}` : (mk.name || '')) : '';
+    m.maker = mk ? (mk.handle || mk.name || '') : '';   // usernames are shown without "@"
     m.byline = s.byline && m.maker ? `by ${m.maker}` : '';
     m.designer = s.credit && j.hasJob ? (m.maker || j.designer || '') : '';
     m.designerStatus = m.byline ? '' : m.designer;   // lower third: no second "by" when the byline shows it
     m.designerUpper = m.designer.toUpperCase();
     const tw = d.twitch;
     m.viewersTxt = s.viewers !== false && tw?.live && tw.viewers != null ? fmtCount(tw.viewers) : '';
+    m.socials = socialGroups(d, s);
+    m.hasSocial = m.socials.length > 0;
     m.mw = s.credit && j.hasJob ? (j.makerworld || '') : '';
     m.creditLine = m.designer || m.mw;
     m.pct = j.progress;
@@ -205,6 +208,20 @@
     m.meterOn = s.meter !== false && (demoActive || d.obs?.meter === 'live');
     m.showAms = s.ams && ((j.hasJob && (j.filaments || []).length) || (d.ams || []).length > 0 || (d.external || []).length > 0);
     return m;
+  }
+
+  // The streamer's socials, in this order; platforms that share a handle are shown once with all their icons.
+  const SOCIALS = [['tiktok', 'socialTiktok', 'tiktokHandle'], ['twitch', 'socialTwitch', null],
+    ['x', 'socialX', 'xHandle'], ['instagram', 'socialInstagram', 'instagramHandle']];
+  function socialGroups(d, s) {
+    const groups = [];
+    for (const [net, on, key] of SOCIALS) {
+      const handle = String((key ? s[key] : (s.twitchChannel || d.twitch?.envChannel)) || '').replace(/^@/, '');
+      if (!s[on] || !handle) continue;
+      const g = groups.find((x) => x.handle.toLowerCase() === handle.toLowerCase());
+      if (g) g.nets.push(net); else groups.push({ handle, nets: [net] });
+    }
+    return groups;
   }
 
   // ------------------------------------------------------------------ list renderers
@@ -289,6 +306,9 @@
             <div class="spools">${u.trays.map((t) => `<div class="spool ${t.active ? 'on' : ''}"><span class="ring ${t.remain == null ? 'unk' : ''}" style="--r:${t.remain ?? 0}">${swatch(t)}</span><span class="lbl">${esc(t.empty ? 'Empty' : (t.name || t.type))}</span><span class="slot">${esc(t.slot)}${t.remain != null ? ` · ${t.remain}%` : ''}</span></div>`).join('')}</div>`).join('');
       }
       return '';
+    },
+    socials(d, m) {
+      return m.socials.map((g) => `<span class="soc">${g.nets.map((n) => `<svg class="ic${n === 'instagram' ? ' line' : ''}"><use href="#i-${n}"/></svg>`).join('')}<b>${esc(g.handle)}</b></span>`).join('');
     },
     segments(d, m) {
       const n = 40, on = Math.floor(m.pctOrZero / 100 * n);
@@ -461,6 +481,16 @@
     }
   }
 
+  // Lower third: the socials' right edge follows the audio meter (the row is shorter when idle), else the row end.
+  function alignSocials() {
+    const soc = stage.querySelector('.t-row > .t-social');
+    if (!soc || soc.hidden) return;
+    const a = stage.querySelector('.t-row > .t-audio');
+    const right = a && !a.hidden ? soc.parentElement.clientWidth - (a.offsetLeft + a.offsetWidth) : 0;
+    const v = `${Math.max(0, Math.round(right))}px`;
+    if (soc.style.right !== v) soc.style.right = v;
+  }
+
   function fit() {
     const k = Math.min(innerWidth / 1280, innerHeight / 720);
     stage.style.transform = `translate(${(innerWidth - 1280 * k) / 2}px, ${(innerHeight - 720 * k) / 2}px) scale(${k})`;
@@ -491,6 +521,7 @@
     stage.style.setProperty('--accent', accent);
     stage.classList.toggle('hidden', layout === 'none' || (s.idle === 'hide' && !d.job.hasJob && !demo));
     bind(m, d);
+    alignSocials();
     vuVisible = !stage.classList.contains('hidden') && vuEls.some((el) => el.offsetParent);
     vuKick();
     if (!stage.classList.contains('ready')) requestAnimationFrame(() => stage.classList.add('ready'));

@@ -174,10 +174,24 @@ html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background:
 .t-title, .t-row { position: absolute; left: calc(var(--hero) + 18px); right: 24px; transition: left .6s ease; }
 .t-hero[hidden] ~ .t-title, .t-hero[hidden] ~ .t-row { left: 24px; }
 /* audio meter as the last stat cell (pushed to the right end): label on top, two horizontal L/R bars below */
-.t-row > .t-audio { margin-left: auto; padding-right: 0; }
+.t-row > .t-audio { padding-right: 0; }
 .t-vu { margin-top: 2px; row-gap: 3px; column-gap: 5px; align-items: center; }
 .vu.t-vu[data-vu=h] .vu-seg { width: 5px; height: 7px; }  /* beats the generic .vu[data-vu=h] size */
 .t-title { bottom: 86px; display: flex; flex-direction: column; gap: 2px; text-shadow: var(--shadow-txt); min-width: 0; }  /* status, then the name right above the stats */
+/* the streamer's socials: in the gap between the stats and the progress line, right edge under the audio meter */
+.t-row > .t-social { position: absolute; bottom: -9px; right: 0; border-left: 0; padding: 0; line-height: 16px;
+  display: flex; align-items: baseline; gap: 16px; font-size: 13px; color: rgba(245, 247, 251, .72); white-space: nowrap; isolation: isolate;
+  /* grey but legible over a bright, compressed camera image: a firm dark outline plus a soft shadow ... */
+  text-shadow: 0 0 1px #000, 0 0 2px #000, 0 0 4px rgba(0,0,0,.9), 0 1px 8px rgba(0,0,0,.8); }
+/* ... and a soft local darkening behind the group (no box edges) */
+.t-social::before { content: ""; position: absolute; inset: -8px -24px; z-index: -1; pointer-events: none;
+  background: radial-gradient(closest-side, rgba(7,9,13,.68), rgba(7,9,13,.4) 62%, rgba(7,9,13,0)); }
+.soc { display: inline-flex; align-items: baseline; gap: 6px; }
+.soc .ic { font-size: 14px; fill: currentColor; stroke: none; align-self: center;
+  filter: drop-shadow(0 0 .7px #000) drop-shadow(0 0 1.5px #000) drop-shadow(0 1px 4px rgba(0,0,0,.7)); }
+.soc .ic.line { fill: none; stroke: currentColor; stroke-width: 2.1; }
+.soc .ic + .ic { margin-left: -1px; }
+.soc b { font-weight: 500; letter-spacing: .01em; }
 .t-row { bottom: 18px; height: 62px; display: flex; align-items: center; gap: 0; text-shadow: var(--shadow-txt); }
 .t-row > * { flex: none; }
 .t-row > * + * { border-left: 1px solid rgba(255,255,255,.16); }

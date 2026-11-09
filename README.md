@@ -3,7 +3,7 @@
 A locally hosted, transparent HTML overlay for streaming Bambu Lab X2D prints with OBS. It shows live job
 progress, time left, elapsed time, layers, both nozzle temperatures, bed and chamber temperatures, the plate
 preview rendered by the slicer, the filament in use and AMS slots (optionally also the model title, a
-"by @maker" credit and the MakerWorld link). Six switchable layouts are included, and the accent colour follows the
+"by maker" credit and the MakerWorld link). Six switchable layouts are included, and the accent colour follows the
 filament being printed. It can also pan the camera crop in OBS smoothly when a print starts or ends, draw a
 Winamp-style two-channel audio meter from OBS's own levels, and show your live Twitch viewer count.
 
@@ -74,9 +74,11 @@ e.g. one scene with `/?layout=hud` and another with `/?layout=minimal`:
 | `idle` | `show` / `hide` when nothing is printing | `show` |
 | `name` | `file` (printer task / file name) / `title` (model title from the 3mf) | `file` |
 | `ams` | `0` / `1`: AMS / filament slots | `1` |
-| `byline` | `0` / `1`: "by @maker" after the print name | `0` |
+| `byline` | `0` / `1`: "by maker" after the print name | `0` |
 | `credit` | `0` / `1`: designer + MakerWorld link | `0` |
 | `viewers` | `0` / `1`: live Twitch viewer count (once set up, see below) | `1` |
+| `socialTwitch` `socialTiktok` `socialX` `socialInstagram` | `0` / `1`: your socials at the right end of the lower third | Twitch only |
+| `tiktokHandle` `xHandle` `instagramHandle` | usernames without `@` (Twitch uses the channel name) | empty |
 | `meter` | `0` / `1`: Winamp-style L/R audio meter (needs the OBS WebSocket server) | `1` |
 | `build` | `0` / `1`: the big lower-third model preview fills up layer by layer (unprinted part as a ghost) | `1` |
 | `demo` | `1` simulate a print, `auto` simulate only when idle/offline | off |
@@ -84,6 +86,9 @@ e.g. one scene with `/?layout=hud` and another with `/?layout=minimal`:
 The **lower third** puts a large model preview in the bottom-left corner, rising above the band, with the job name
 above the stats row. As layers print, the preview turns from a pale ghost into the solid model, with a glowing line at
 the current layer height. Layer count is used rather than time %, because it tracks physical height.
+Your own socials sit under the stats, right-aligned with the audio meter, just above the progress line: Twitch (your
+channel) by default, with TikTok, X and Instagram switchable in the control panel. Platforms that share a username are
+shown once with all their logos.
 
 The **audio meter** is two segmented L/R bars in an old-Winamp style: LED segments going green→yellow→red,
 peak caps that hold then fall, pixel-font labels. It sits at the bottom-right end of the lower third, in the glass
