@@ -374,6 +374,12 @@ class ParsingTests(unittest.TestCase):
         self.assertEqual(server.pick_model_file(files, "Double_Stroller(2)_1", "")["path"], "/h/b")
         self.assertIsNone(server.pick_model_file(files, "Missing", "/data/Metadata/plate_1.gcode"))
 
+    def test_pick_model_file_matches_hex_escaped_characters(self):
+        files = [{"name": "Pasta Playset3a Pasta Sauce Jar.gcode.3mf", "path": "/h/a", "time": 10},
+                 {"name": "AC2fDC Adapter.gcode.3mf", "path": "/h/b", "time": 20}]
+        self.assertEqual(server.pick_model_file(files, "Pasta Playset: Pasta Sauce Jar", "")["path"], "/h/a")
+        self.assertEqual(server.pick_model_file(files, "AC/DC Adapter", "")["path"], "/h/b")
+
     def _3mf(self, plate: int) -> Path:
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)

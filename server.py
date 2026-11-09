@@ -678,7 +678,9 @@ def job_plate(p: dict) -> int | None:
 
 
 def _norm_name(s: str) -> str:
-    s = s.lower().replace("/", "2f")
+    # The printer saves the job file with characters that are invalid in file names written as their hex
+    # code without the '%': job "Pasta Playset: Pasta Sauce Jar" -> "Pasta Playset3a Pasta Sauce Jar.gcode.3mf".
+    s = re.sub(r'[\\/:*?"<>|]', lambda m: f"{ord(m.group()):02x}", s.lower())
     s = re.sub(r"(\.gcode)?\.3mf$", "", s)
     return re.sub(r"[^0-9a-z]+", "", s)
 
