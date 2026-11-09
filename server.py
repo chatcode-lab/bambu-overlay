@@ -579,19 +579,25 @@ def parse_slice_info(data: bytes, plate: int) -> dict:
 # --------------------------------------------------------------------------- media worker
 
 class MediaWorker(threading.Thread):
-    """Fetches the active job's .3mf once (read-only) for the cover image + slice metadata."""
+    """Fetches the active job's .3mf (read-only) for the cover image + slice metadata; looks again only
+    when the loaded copy predates the job."""
 
     def __init__(self, hub: "Hub"):
         super().__init__(name="media", daemon=True)
         self.hub = hub
         self.attempts: dict[str, tuple[int, float]] = {}
+        self.next_recheck: tuple[str, float] = ("", 0.0)
 
     def run(self):
         while True:
             self.hub.media_wakeup.wait(5)
             self.hub.media_wakeup.clear()
             want = self.hub.wanted_media()
-            if not want or self.hub.media.get("key") == want["key"]:
+            if not want:
+                continue
+            media = self.hub.media
+            if media.get("key") == want["key"]:
+                self._recheck(want, media.get("meta") or {})
                 continue
             if self._load_cached(want):
                 continue
@@ -608,6 +614,18 @@ class MediaWorker(threading.Thread):
                 log.info("Media: %s (retry in %ds)", e, delay)
                 self.hub.set_media_status(f"model not available yet: {e}")
 
+    def _recheck(self, want, meta):
+        delay = recheck_delay(meta, want, time.time())
+        key, due = self.next_recheck
+        if delay is None or (key == want["key"] and time.monotonic() < due):
+            return
+        self.next_recheck = (want["key"], time.monotonic() + delay)
+        try:
+            if self._fetch(want, only_if_newer=True):
+                log.info("Media: replaced a copy from an earlier print with this job's file")
+        except Exception as e:
+            log.info("Media: re-check failed: %s (retry in %ds)", e, delay)
+
     def _dir(self, key: str) -> Path:
         return MEDIA_DIR / hashlib.sha1(key.encode()).hexdigest()[:16]
 
@@ -620,7 +638,7 @@ class MediaWorker(threading.Thread):
         self.hub.set_media(want["key"], meta, cover)
         return True
 
-    def _fetch(self, want):
+    def _fetch(self, want, only_if_newer: bool = False) -> bool:
         hub = self.hub
         with ReadOnlyFileChannel(hub.ip, hub.serial, hub.cfg.access_code) as fc:
             match = None
@@ -631,6 +649,8 @@ class MediaWorker(threading.Thread):
                     break
             if not match:
                 raise FileNotFoundError(f"no .3mf matching '{want['name']}' on printer storage")
+            if only_if_newer and older_than_job(match.get("time"), want):
+                return False
             if (reason := stale_file_reason(match, want, time.time())):
                 raise StaleModelFile(reason)
             log.info("Media: downloading %s (%.1f MB, read-only)", match["path"], (match.get("size") or 0) / 1e6)
@@ -653,22 +673,39 @@ class MediaWorker(threading.Thread):
         hub.set_media(want["key"], meta, cover)
         log.info("Media: ready - %s by %s, %s g, cover %s", meta.get("title") or want["name"],
                  meta.get("designer") or "?", meta.get("weightG"), "yes" if cover else "no")
+        return True
 
 
 MEDIA_CACHE_V = 2        # bump to ignore cached job media written by older versions (v1 could hold a stale plate)
 FRESH_FILE_SLACK = 120   # s: allowed difference between the printer's clock and ours
 FRESH_FILE_GRACE = 180   # s: after this, accept an older file (a re-print from the printer's history keeps it)
+RECHECK_FOR = 20 * 60    # s: how long after the start to keep looking for a newer copy of an older loaded file
+
+
+def older_than_job(file_time, want: dict) -> bool:
+    """The file was saved before this job started (only known for jobs we saw start)."""
+    start, file_time = want.get("start"), _int(file_time)
+    return want.get("src") == "observed" and bool(start) and bool(file_time) and file_time < start - FRESH_FILE_SLACK
 
 
 def stale_file_reason(match: dict, want: dict, now: float) -> str | None:
     """The printer saves a job's .3mf a few seconds after the job starts, so right at the start a same-named
     file from an earlier print may still be there. Wait for the new copy while the job is young."""
-    start, file_time = want.get("start"), _int(match.get("time"))
-    if want.get("src") != "observed" or not start or not file_time or now - start > FRESH_FILE_GRACE:
-        return None
-    if file_time < start - FRESH_FILE_SLACK:
+    if older_than_job(match.get("time"), want) and now - want["start"] <= FRESH_FILE_GRACE:
         return f"{match.get('name')} is from an earlier print, waiting for the printer to save this job's copy"
     return None
+
+
+def recheck_delay(meta: dict, want: dict, now: float) -> float | None:
+    """Seconds until the next look for a newer copy, or None when the loaded file needs no re-check. A file
+    can be fetched before the job's start is known (the new job's name can arrive while the printer still
+    reports the previous FINISH); if it predates the job, look again while the job is young."""
+    if want.get("state") not in ACTIVE_STATES or not older_than_job(meta.get("fileTime"), want):
+        return None
+    age = now - want["start"]
+    if age > RECHECK_FOR:
+        return None
+    return 15 if age < FRESH_FILE_GRACE else 120
 
 
 def job_plate(p: dict) -> int | None:

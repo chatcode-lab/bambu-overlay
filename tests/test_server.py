@@ -157,6 +157,18 @@ class ViewTests(HubTestCase):
                 self.hub.update_settings(bad)
 
 
+class JobStartTests(HubTestCase):
+    def test_new_job_name_can_arrive_before_its_start(self):
+        # what happened at 10:27:17: the new job's name came while the printer still reported the previous FINISH
+        self.feed(gcode_state="FINISH", mc_percent=100)
+        self.feed(gcode_state="FINISH", subtask_name="Key", task_id="2", mc_percent=100)
+        self.assertIsNone(self.hub.wanted_media()["start"])  # a fetch now cannot tell an old copy from a new one
+        self.feed(gcode_state="PREPARE", subtask_name="Key", task_id="2", mc_percent=0)
+        want = self.hub.wanted_media()
+        self.assertEqual((want["src"], want["state"]), ("observed", "PREPARE"))
+        self.assertEqual(server.recheck_delay({"fileTime": want["start"] - 12 * 3600}, want, want["start"] + 1), 15)
+
+
 class CropTargetTests(HubTestCase):
     def test_follows_printer_state(self):
         self.feed()
@@ -416,6 +428,48 @@ class ParsingTests(unittest.TestCase):
         self.assertIsNone(server.stale_file_reason(new, want, start + 10))
         self.assertIsNone(server.stale_file_reason(old, want, start + server.FRESH_FILE_GRACE + 1))  # re-print
         self.assertIsNone(server.stale_file_reason(old, {"start": start, "src": "first-seen"}, start + 1))
+
+    def test_recheck_delay_only_while_a_young_job_holds_an_older_file(self):
+        start = 1_000_000
+        want = {"start": start, "src": "observed", "state": "PREPARE"}
+        old, new = {"fileTime": start - 12 * 3600}, {"fileTime": start + 5}
+        self.assertEqual(server.recheck_delay(old, want, start + 1), 15)
+        self.assertEqual(server.recheck_delay(old, want, start + server.FRESH_FILE_GRACE + 1), 120)
+        self.assertIsNone(server.recheck_delay(old, want, start + server.RECHECK_FOR + 1))
+        self.assertIsNone(server.recheck_delay(new, want, start + 1))
+        self.assertIsNone(server.recheck_delay(old, {**want, "state": "FINISH"}, start + 1))
+        self.assertIsNone(server.recheck_delay(old, {**want, "src": "first-seen"}, start + 1))
+
+    def test_recheck_replaces_a_copy_from_an_earlier_print(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        start, blob = 1_000_000, self._3mf(1).read_bytes()
+        listing = [{"name": "Key.gcode.3mf", "path": "/h/Key.gcode.3mf", "time": start - 12 * 3600}]
+
+        class FakeChannel:
+            def __init__(self, *a): pass
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+            def storages(self): return ["emmc"]
+            def list_models(self, storage): return listing
+            def download(self, path, fh): fh.write(blob)
+
+        hub = mock.Mock()
+        want = {"key": "k", "name": "Key", "gcode_file": "", "plate": 1, "state": "PREPARE",
+                "start": start, "src": "observed"}
+        with mock.patch.object(server, "MEDIA_DIR", Path(tmp.name)), \
+                mock.patch.object(server, "CACHE_DIR", Path(tmp.name)), \
+                mock.patch.object(server, "ReadOnlyFileChannel", FakeChannel), \
+                mock.patch.object(server.time, "time", return_value=start + 2):
+            worker = server.MediaWorker(hub)
+            worker._recheck(want, {"fileTime": start - 12 * 3600})  # printer has not saved this job's copy yet
+            hub.set_media.assert_not_called()
+            worker._recheck(want, {"fileTime": start - 12 * 3600})  # too soon: no second listing
+            listing[0]["time"] = start + 5
+            worker.next_recheck = ("k", 0.0)
+            worker._recheck(want, {"fileTime": start - 12 * 3600})
+        hub.set_media.assert_called_once()
+        self.assertEqual(hub.set_media.call_args.args[1]["fileTime"], start + 5)
 
     def test_job_plate(self):
         self.assertEqual(server.job_plate({"plate_idx": 3}), 3)
