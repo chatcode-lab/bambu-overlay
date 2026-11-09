@@ -128,6 +128,14 @@ class ViewTests(HubTestCase):
         self.assertEqual([e["slot"] for e in v["external"]], ["Ext-R"])
         self.assertEqual(v["job"]["predictionSec"], 14370)
 
+    def test_job_filament_colour_follows_the_mapped_tray_not_the_sliced_file(self):
+        self.feed(mapping=[65535, 65535, 65535, 65535, 3])  # sliced brown, printer feeds red A4
+        self.hub.set_media(self.hub.job_key, server.parse_slice_info(SLICE_INFO, 1), None)
+        f = self.hub.view()["job"]["filaments"][0]
+        self.assertEqual((f["slot"], f["color"]), ("A4", "#F72323"))
+        self.feed(mapping=[])  # no mapping (e.g. a re-print): fall back to the sliced colour
+        self.assertEqual(self.hub.view()["job"]["filaments"][0]["color"], "#7C4B00")
+
     def test_prepare_stage_and_steps(self):
         v = self.feed(gcode_state="PREPARE", stg_cur=7, mc_percent=0)
         self.assertEqual(v["job"]["stage"], "Heating hotend")

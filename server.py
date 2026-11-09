@@ -1376,7 +1376,8 @@ def build_view(hub: "Hub") -> dict:
         loc = None if m == 0xFFFF else (m >> 8, m & 0xFF)
         tray = _tray(_find_tray(p, *loc) or {}, _slot_label(*loc)) if loc else None
         filaments.append({"type": f.get("type"), "name": (tray or {}).get("name") or f.get("type"),
-                          "color": f.get("color") or (tray or {}).get("color"), "colors": (tray or {}).get("colors", []),
+                          # the mapped tray is what is really printing; the sliced colour can be from an older setup
+                          "color": (tray or {}).get("color") or f.get("color"), "colors": (tray or {}).get("colors", []),
                           "usedG": f.get("usedG"), "usedM": f.get("usedM"), "slot": (tray or {}).get("slot"),
                           "remain": (tray or {}).get("remain"), "active": loc is not None and loc == active_loc})
     if not filaments and loaded:
