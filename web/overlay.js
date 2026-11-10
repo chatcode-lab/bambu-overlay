@@ -384,9 +384,10 @@
     vu.lastData = performance.now();
     vuKick();
   }
-  // The loop only runs while a meter is on screen and something moves: 24 fps (OBS sources render at ~30),
-  // stopped entirely when hidden, silent and settled, or when the page itself is in the background.
-  const VU_FRAME_MS = 1000 / 24;
+  // The loop only runs while a meter is on screen and something moves: 15 fps (every other frame of a 30 fps
+  // stream, lively enough for a beat meter at a fraction of the redraws), stopped entirely when hidden, silent and
+  // settled, or when the page itself is in the background.
+  const VU_FRAME_MS = 1000 / 15;
   let vuRunning = false, vuVisible = false;
   function vuKick() {
     if (vuRunning || !vuVisible || LITE || document.hidden) return;

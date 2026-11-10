@@ -208,12 +208,15 @@ Built to run all day in the background:
 | `server.py` (printer + OBS crop + meter relay, overlay connected) | ~0.5% | ~18 MB |
 | menu-bar app | ~0.15% | ~15 MB |
 | overlay page, lower third with live meter (headless Chrome, software rendering) | ~3% | |
+| the same page as an OBS browser source (OBS's browser GPU + renderer helpers, 1280×720 at 30 fps, M2) | ~16% | |
 | control panel with 7 previews open | ~4% | |
 
 How it stays low:
 * There are no endless repaint animations. The status dot "breathes" in 6 discrete steps, and the progress bar gloss is static.
-* The audio meter redraws at 24 fps only while it's on screen and audio is moving. It stops completely when hidden,
-  silent, or when the page isn't visible. The server doesn't relay repeated identical meter frames.
+* The socials glint animates only during its three 0.8 s flashes; between them nothing on the line is animating.
+* The audio meter redraws at 15 fps only while it's on screen and audio is moving. It stops completely when hidden,
+  silent, or when the page isn't visible. It sits on its own layer without glow, so a redraw repaints just the
+  meter. The server doesn't relay repeated identical meter frames.
 * Gallery thumbnails in the control panel are static (`?lite=1`: no animation, refreshed every 5 s).
 * The printer pushes one status report a second. The 3MF model file is fetched once per job and cached.
 

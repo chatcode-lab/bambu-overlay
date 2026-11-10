@@ -120,14 +120,15 @@ html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background:
 .chip.off { opacity: .62; }
 
 /* ===================================================================== VU METER (Winamp-ish) */
-/* No container: semi-transparent LED segments straight on the overlay background, soft glow only. */
-.vu { --g: #4fe04f; --y: #e2e24c; --o: #ffa040; --r: #ff4d3d;
+/* No container: semi-transparent LED segments straight on the overlay background. It redraws many times a second,
+   so it gets its own layer (only the meter is repainted, not the text and shadows around it) and no glow. */
+.vu { --g: #4fe04f; --y: #e2e24c; --o: #ffa040; --r: #ff4d3d; will-change: transform;
   display: grid; grid-template-columns: auto auto; column-gap: 3px; row-gap: 4px; text-shadow: none; }
 .vu-ch { display: flex; gap: 1px; }
 .vu[data-vu=v] .vu-ch { flex-direction: column-reverse; }
 .vu-seg { background: rgba(255,255,255,.07); border-radius: 1px; }
-.vu-seg.on { background: var(--c); opacity: .78; box-shadow: 0 0 6px color-mix(in srgb, var(--c) 55%, transparent); }
-.vu-seg.pk { background: #fff; opacity: .7; box-shadow: 0 0 5px rgba(255,255,255,.5); }
+.vu-seg.on { background: var(--c); opacity: .78; }
+.vu-seg.pk { background: #fff; opacity: .7; }
 .vu[data-vu=v] .vu-seg { width: 13px; height: 3px; }
 .vu[data-vu=h] .vu-seg { width: 3px; height: 4px; }
 .vu-lbl { font-family: "Silkscreen", var(--f-mono); font-size: 8px; line-height: 1; color: var(--ink3); text-align: center;
@@ -203,22 +204,27 @@ html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background:
 .soc .ic { font-size: 14px; fill: currentColor; stroke: none; filter: var(--soc-ic-filter); }
 .soc .ic.line, .soc .ic.note { fill: none; stroke: currentColor; stroke-width: 2.1; }
 .soc b { font-weight: 500; letter-spacing: .01em; }
-/* in: rolls up into view (with a little overshoot); a glint then runs over the logos and letters three times, 3 s
-   apart (each 3.8 s cycle: a 0.8 s glint, then rest); out: rolls back down */
+/* in: rolls up into view (with a little overshoot); a glint then runs over the logos and letters three times, 3.8 s
+   apart; out: rolls back down. Three separate 0.8 s glints rather than one 3.8 s animation repeated: between glints
+   nothing is animating, so the browser isn't restyling every letter's shadows on every frame of the rest */
 .soc.in { animation: soc-flip-in .75s cubic-bezier(.25, .9, .3, 1.25) both; }
-.soc.in .ic { animation: soc-icon-glint 3.8s ease-in-out 3 both; animation-delay: calc(var(--i) * 70ms + 1100ms); }
-.soc.in .ch { animation: soc-glint 3.8s ease-in-out 3 both; animation-delay: calc(var(--i) * 45ms + 1250ms); }
+.soc.in .ic { --gd: calc(var(--i) * 70ms + 1100ms);
+  animation: soc-icon-glint .8s ease-in-out var(--gd), soc-icon-glint .8s ease-in-out calc(var(--gd) + 3.8s),
+             soc-icon-glint .8s ease-in-out calc(var(--gd) + 7.6s); }
+.soc.in .ch { --gd: calc(var(--i) * 45ms + 1250ms);
+  animation: soc-glint .8s ease-in-out var(--gd), soc-glint .8s ease-in-out calc(var(--gd) + 3.8s),
+             soc-glint .8s ease-in-out calc(var(--gd) + 7.6s); }
 .soc.out { animation: soc-flip-out .55s cubic-bezier(.5, 0, .75, .4) forwards; }
 /* ends at transform: none, so the resting line is plain 2D text at 1:1 (a lingering 3D layer made the glyphs jitter
    when the glint repainted them) */
 @keyframes soc-flip-in { from { opacity: 0; transform: rotateX(-90deg); } 35% { opacity: 1; } to { opacity: 1; transform: none; } }
 @keyframes soc-flip-out { from { opacity: 1; transform: none; } 65% { opacity: 1; } to { opacity: 0; transform: rotateX(-90deg); } }
 @keyframes soc-glint {
-  0%, 21%, 100% { color: var(--soc-ink); text-shadow: var(--soc-shadow), 0 0 0 transparent, 0 0 0 transparent; }
-  10.5% { color: #fff; text-shadow: var(--soc-shadow), 0 0 8px rgba(255,255,255,.85), 0 0 16px var(--accent); } }
+  0%, 100% { color: var(--soc-ink); text-shadow: var(--soc-shadow), 0 0 0 transparent, 0 0 0 transparent; }
+  50% { color: #fff; text-shadow: var(--soc-shadow), 0 0 8px rgba(255,255,255,.85), 0 0 16px var(--accent); } }
 @keyframes soc-icon-glint {
-  0%, 21%, 100% { color: var(--soc-ink); filter: var(--soc-ic-filter); }
-  10.5% { color: #fff; filter: drop-shadow(0 0 .7px #000) drop-shadow(0 0 1.5px #000) drop-shadow(0 0 6px rgba(255,255,255,.9)); } }
+  0%, 100% { color: var(--soc-ink); filter: var(--soc-ic-filter); }
+  50% { color: #fff; filter: drop-shadow(0 0 .7px #000) drop-shadow(0 0 1.5px #000) drop-shadow(0 0 6px rgba(255,255,255,.9)); } }
 .t-row { bottom: 18px; height: 62px; display: flex; align-items: center; gap: 0; text-shadow: var(--shadow-txt); }
 .t-row > * { flex: none; }
 .t-row > * + * { border-left: 1px solid rgba(255,255,255,.16); }
@@ -242,12 +248,16 @@ html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background:
 .build.building .edge { opacity: .9; }
 .build.full .ghost { opacity: 0; }
 /* plate badge (left) and heights (right) on the preview, their (last) text line on the same baseline as the stats
-   values (isometric previews leave the bottom corners free) */
+   values (isometric previews leave the bottom corners free, and they're dark there: plain shadowed text, no backdrop) */
 .hero-tags { position: absolute; left: 6px; right: 6px; bottom: 18px; display: flex; align-items: last baseline; gap: 4px; }
-.hero-plate, .hero-z { padding: 3px 7px; background: rgba(0,0,0,.45); text-shadow: none; white-space: nowrap; }
-.hero-plate { border-radius: 99px; font-size: 10.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--ink2); }
-/* two right-aligned lines: layer height (STEP), then current / model height (Z) */
-.hero-z { margin-left: auto; display: grid; justify-items: end; border-radius: 9px; font-size: 10px; font-weight: 600; color: var(--ink3); }
+.hero-plate, .hero-z { padding: 3px 7px; text-shadow: var(--shadow-txt); white-space: nowrap; }
+.hero-plate { font-size: 10.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--ink2); }
+/* two lines: layer height (STEP), then current / model height (Z). Both lines are as wide as the wider one, each with
+   its label at the left and its value at the right, so the labels share a left edge and the values a right edge; the
+   wider line keeps just one space between label and value */
+.hero-z { margin-left: auto; display: grid; font-size: 10px; font-weight: 600; color: var(--ink3); }
+.hero-z .hz { display: flex; justify-content: space-between; align-items: baseline; }
+.hero-z .hz > :first-child::after { content: " "; white-space: pre; }   /* the minimum gap: one plain space */
 .hero-z b { font-weight: 700; color: var(--ink2); font-variant-numeric: tabular-nums; }
 .hero-z i { font-style: normal; font-size: .85em; }
 .t-by { color: var(--ink3); text-transform: none; font-weight: 500; letter-spacing: 0; overflow: hidden; text-overflow: ellipsis; }
