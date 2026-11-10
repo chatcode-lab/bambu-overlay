@@ -656,6 +656,14 @@ class ParsingTests(unittest.TestCase):
         out = server.gcode_layers(io.BytesIO(b"; total layer number: 9\n" + body))
         self.assertEqual((out["totalLayers"], "layerZ" in out), (9, False))
 
+    def test_parse_3mf_decodes_a_double_escaped_title(self):
+        path = self._3mf(1)
+        with zipfile.ZipFile(path, "a") as z:
+            z.writestr("3D/3dmodel.model", '<model><metadata name="Title">Pasta Box,Bowl,&amp;amp;Funny Fork</metadata>'
+                                           '<metadata name="Designer">A &amp; B</metadata></model>')
+        meta, _ = server.parse_3mf(path, 1)
+        self.assertEqual((meta["title"], meta["designer"]), ("Pasta Box,Bowl,&Funny Fork", "A & B"))
+
     def test_parse_3mf_rejects_another_plates_file(self):
         # same project printed earlier with plate 1; the job now prints plate 3 -> not the job's file (yet)
         with self.assertRaises(server.StaleModelFile):

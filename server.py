@@ -605,8 +605,19 @@ def parse_3mf(path: Path, plate: int | None) -> tuple[dict, bytes | None]:
             head = model[:200_000].decode("utf-8", "replace")
             for key, value in re.findall(r'<metadata name="([^"]+)">([^<]*)</metadata>', head):
                 if key in ("Title", "Designer", "License", "ProfileTitle"):
-                    meta[key[0].lower() + key[1:]] = html.unescape(value).strip()
+                    meta[key[0].lower() + key[1:]] = unescape_all(value).strip()
     return meta, cover
+
+
+def unescape_all(text: str) -> str:
+    """Decodes entities until none are left: MakerWorld titles arrive in the .3mf HTML-escaped and then XML-escaped
+    again ("Bowl,&amp;amp;Funny Fork"), so a single pass would leave "&amp;"."""
+    for _ in range(3):
+        decoded = html.unescape(text)
+        if decoded == text:
+            break
+        text = decoded
+    return text
 
 
 Z_MARK = re.compile(rb"^; Z_HEIGHT: *([\d.]+)", re.M)
@@ -797,7 +808,8 @@ class MediaWorker(threading.Thread):
         return True
 
 
-MEDIA_CACHE_V = 5        # bump to ignore cached job media from older versions (v1 stale plate, v2 nozzles, v3 layers, v4 heights)
+MEDIA_CACHE_V = 6        # bump to ignore cached job media from older versions (v1 stale plate, v2 nozzles, v3 layers, v4 heights,
+                         # v5 double-escaped titles)
 FRESH_FILE_SLACK = 120   # s: allowed difference between the printer's clock and ours
 FRESH_FILE_GRACE = 180   # s: after this, accept an older file (a re-print from the printer's history keeps it)
 RECHECK_FOR = 20 * 60    # s: how long after the start to keep looking for a newer copy of an older loaded file
