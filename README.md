@@ -59,7 +59,14 @@ to keep it to this Mac.
 1. **Sources → + → Browser**, URL `http://127.0.0.1:8787/`, **Width 1280, Height 720** (1920×1080 works too:
    everything is laid out on a 1280×720 stage and scaled to fit).
 2. Place it above the camera source and stretch it over the canvas. The page background is transparent.
-3. Optional: **Docks → Custom Browser Docks** → add `http://127.0.0.1:8787/control` to switch layouts without leaving OBS.
+3. In the camera's Media Source (*Local File* off, input `rtsps://bblp:<access code>@<printer IP>:322/streaming/live/1`),
+   set **FFmpeg Options** to `timeout=10000000`. A printer that is switched off goes silent without closing the
+   connection, and OBS then holds the last frame forever: its own 30 s timeout uses an option name that current
+   FFmpeg no longer has. With the option, the source clears after 10 s and OBS retries every *Reconnect Delay* until
+   the printer is back.
+4. Optional: **Sources → + → Image** → `web/testcard.png`, at the bottom of the scene under the camera. It is only
+   seen while the camera is down ("Camera offline"). `web/testcard.html` is its source.
+5. Optional: **Docks → Custom Browser Docks** → add `http://127.0.0.1:8787/control` to switch layouts without leaving OBS.
 
 The control panel changes every overlay that has no URL parameters. To pin a source to one look, add parameters,
 e.g. one scene with `/?layout=hud` and another with `/?layout=minimal`:
@@ -255,6 +262,7 @@ web/overlay.css      layout styles
 web/overlay.js       state → layout binding, demo data, accent colour
 web/control.html     control panel
 web/preview.html     overlay over a stream frame (web/preview-bg.jpg)
+web/testcard.html    "Camera offline" card, rendered to web/testcard.png (an OBS image under the camera)
 tests/test_server.py offline tests: parsing, read-only guarantees, crop animation against a fake OBS
 cache/               settings, job start times, cached plate previews, maker credits, Twitch app credentials
 ```

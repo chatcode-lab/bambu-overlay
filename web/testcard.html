@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Camera offline card</title>
+<!-- Source of web/testcard.png: a full-canvas image placed under the camera source in OBS. While frames arrive the
+     camera covers it; when the feed drops and OBS clears the source, the card shows through.
+     Re-render (1280x720, fonts load from Google Fonts):
+       "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless --hide-scrollbars \
+         --force-device-scale-factor=1 --window-size=1280,720 --virtual-time-budget=5000 \
+         --screenshot="$PWD/web/testcard.png" "file://$PWD/web/testcard.html" -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&family=JetBrains+Mono:wght@500&family=Space+Grotesk:wght@600&display=swap">
+<style>
+  :root {
+    --bg: #0b0d12; --ink: #f5f7fb; --ink3: rgba(245, 247, 251, .70); --ink4: rgba(245, 247, 251, .36);
+    --line: rgba(255, 255, 255, .045); --accent: #4fe3c1;
+  }
+  html, body { margin: 0; width: 1280px; height: 720px; overflow: hidden; background: var(--bg); }
+  .card {
+    position: relative; width: 1280px; height: 720px; color: var(--ink);
+    font-family: "Inter", system-ui, sans-serif; -webkit-font-smoothing: antialiased;
+    background-color: var(--bg);
+    background-image:
+      radial-gradient(ellipse 60% 70% at 50% 40%, rgba(79, 227, 193, .07), transparent 70%),
+      linear-gradient(var(--line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--line) 1px, transparent 1px);
+    background-size: auto, 40px 40px, 40px 40px;
+    background-position: 0 0, 0 0, 0 0;
+  }
+  /* crosshair through the circle's centre */
+  .h, .v { position: absolute; background: rgba(255, 255, 255, .09); }
+  .h { left: 0; right: 0; top: 290px; height: 1px; }
+  .v { top: 0; bottom: 0; left: 640px; width: 1px; }
+  /* registration corners (kept above the lower third, which the overlay covers) */
+  .mark { position: absolute; width: 26px; height: 26px; border: 0 solid color-mix(in srgb, var(--accent) 60%, transparent); }
+  .tl { left: 24px; top: 24px; border-width: 2px 0 0 2px; }
+  .tr { right: 24px; top: 24px; border-width: 2px 2px 0 0; }
+  .bl { left: 24px; bottom: 150px; border-width: 0 0 2px 2px; }
+  .br { right: 24px; bottom: 150px; border-width: 0 2px 2px 0; }
+
+  .ring {
+    position: absolute; left: 440px; top: 90px; width: 400px; height: 400px; border-radius: 50%;
+    overflow: hidden; background: rgba(11, 13, 18, .94);
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, .16), 0 0 0 10px rgba(11, 13, 18, .9), 0 0 0 11px rgba(255, 255, 255, .07);
+    display: grid; grid-template-rows: 92px 1fr 64px;
+  }
+  .bars, .steps { display: flex; }
+  .bars span, .steps span { flex: 1; }
+  .bars span:nth-child(1) { background: #d9dce3; }
+  .bars span:nth-child(2) { background: #fbbf24; }
+  .bars span:nth-child(3) { background: #4fe3c1; }
+  .bars span:nth-child(4) { background: #4ade80; }
+  .bars span:nth-child(5) { background: #e879f9; }
+  .bars span:nth-child(6) { background: #f87171; }
+  .bars span:nth-child(7) { background: #60a5fa; }
+  .bars { opacity: .9; }
+  .steps span:nth-child(1) { background: #0e1015; }
+  .steps span:nth-child(2) { background: #23262d; }
+  .steps span:nth-child(3) { background: #3b3f47; }
+  .steps span:nth-child(4) { background: #5a5f69; }
+  .steps span:nth-child(5) { background: #858a94; }
+  .steps span:nth-child(6) { background: #b4b8c0; }
+  .steps span:nth-child(7) { background: #e6e8ec; }
+
+  .msg { display: grid; place-content: center; justify-items: center; gap: 10px; text-align: center; padding-bottom: 4px; }
+  .msg svg { width: 44px; height: 44px; fill: none; stroke: var(--ink3); stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+  .title { font-family: "Space Grotesk", "Inter", sans-serif; font-weight: 600; font-size: 38px; line-height: 1; letter-spacing: -.01em; }
+  .sub { font-size: 14px; line-height: 1.4; color: var(--ink3); max-width: 300px; }
+  .tag {
+    position: absolute; left: 0; right: 0; top: 518px; display: flex; justify-content: center; align-items: center; gap: 10px;
+    font-family: "JetBrains Mono", ui-monospace, monospace; font-weight: 500; font-size: 12px; line-height: 1;
+    color: var(--ink4); text-transform: uppercase;
+  }
+  /* trim the text box to the capitals so the dot centres on them; drop the trailing tracking so the pair centres */
+  .tag span { letter-spacing: .32em; margin-right: -.32em; text-box: trim-both cap alphabetic; }
+  .tag i { width: 7px; height: 7px; border-radius: 50%; background: #f87171; box-shadow: 0 0 8px rgba(248, 113, 113, .55); }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="h"></div><div class="v"></div>
+  <div class="mark tl"></div><div class="mark tr"></div><div class="mark bl"></div><div class="mark br"></div>
+  <div class="ring">
+    <div class="bars"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+    <div class="msg">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.5 6.5H14a2 2 0 0 1 2 2v2.2l4.6-2.9a.6.6 0 0 1 .9.5v7.4"/><path d="M16 15.5a2 2 0 0 1-2 2H4.5a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2H6"/><path d="m3 3 18 18"/></svg>
+      <div class="title">Camera offline</div>
+      <div class="sub">The printer is off or the feed is reconnecting. It comes back on its own.</div>
+    </div>
+    <div class="steps"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+  </div>
+  <div class="tag"><i></i><span>No signal</span></div>
+</div>
+</body>
+</html>
